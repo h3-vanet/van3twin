@@ -3,9 +3,21 @@
 //
 
 #include "foresee.h"
+#include "ns3/foresee.h"
 
 namespace ns3
 {
+void
+foresee::setTrajectoryPredictor (double horizon_time, double step_time, double negotiation_time,
+                                 double deceleration_time, double lc_duration, PredictionType prediction_type)
+{
+  m_traj_predictor = new trajectoryPrediction(horizon_time, step_time, negotiation_time, deceleration_time);
+  m_step_time = step_time;
+  m_negotiation_time = negotiation_time;
+  m_time_to_lc = lc_duration;
+  m_prediction_type = prediction_type;
+}
+
 void
 foresee::WrapperFORESEEMobilityModel()
 {
@@ -39,6 +51,19 @@ foresee::WrapperFORESEEMobilityModel()
     {
       NS_FATAL_ERROR ("FORESEE Mobility Model needs the MCM Basic Service of the vehicle.");
     }
+  // Check for predictor
+  if (m_prediction_type == UNKNOWN)
+    {
+      NS_FATAL_ERROR ("FORESEE Mobility Model needs the prediction type.");
+    }
+  if (m_node == nullptr)
+    {
+      NS_FATAL_ERROR ("FORESEE Mobility Model needs the pointer of the vehicle node.");
+    }
+  if (m_station_type != StationType_passengerCar && m_station_type != StationType_lightTruck)
+    {
+      NS_FATAL_ERROR ("FORESEE Mobility Model needs the station type ['StationType_passengerCar', 'StationType_lightTruck'].");
+    }
   // Schedule the FORESEE Mobility Model to start at the specified time
   Simulator::Schedule (Seconds(m_start_time), &foresee::FORESEEMobilityModel, this);
 }
@@ -51,75 +76,6 @@ foresee::setNumberOfLanes ()
   m_num_lanes = lanes;
 }
 
-double IDMAcceleration(
-               double v,
-               double v_lead,
-               double gap,
-               double v0,
-               double a_max,
-               double b,
-               double s0,
-               double T,
-               double delta = 4.0
-)
-{
-  // Ensure the gap is not too small to avoid singularities
-  gap = std::max(gap, 0.1);
-
-  // Calculate the relative speed and desired gap
-  double delta_v = v - v_lead;
-  double s_star = s0 + v * T + (v * delta_v) / (2.0 * std::sqrt(a_max * b));
-
-  // Compute the acceleration based on the IDM formula
-  double a_exp = a_max * (1.0 - std::pow(v / v0, delta) - std::pow(s_star / gap, 2.0));
-
-  return a_exp;
-}
-
-double
-estimateTimeFromPredictionIDM(
-    std::vector<foresee::TrajectoryItem> leader,
-    std::vector<foresee::TrajectoryItem> follower,
-    double comfort_decel,
-    double a_max,
-    double desired_speed,
-    double b,
-    double s0,
-    double T)
-{
-  // Determine the minimum size of the leader and follower trajectories
-  size_t N = std::min(leader.size(), follower.size());
-
-  for (size_t k = 0; k < N; ++k)
-    {
-      auto lead = leader[k];
-      auto foll = follower[k];
-
-      // Calculate the gap between the leader and follower at this timestep
-      double gap = std::abs(lead.x - foll.x);
-
-      // Calculate the required braking for the follower
-      double a_required_RV = IDMAcceleration(
-          foll.speed,   // follower
-          lead.speed,   // leader
-          gap,
-          desired_speed,
-          a_max,
-          b,
-          s0,
-          T
-      );
-
-      // Check if the required braking is within comfort limits
-      if (a_required_RV >= -comfort_decel)
-        {
-          return (k + 1) * STEP_TIME; // EstimatedTime found
-        }
-    }
-
-  return -1.0; // No feasible coordination in time horizon
-}
-
 void
 foresee::FORESEEMobilityModel ()
 {
@@ -128,7 +84,8 @@ foresee::FORESEEMobilityModel ()
   bool res = m_LDM->getAllCVs (vehicles);
   if (res == false)
     {
-      // TODO automatically move vehicle since it can change the lane without any issues
+      // The route is empty (no perceived vehicles in the LDM
+      // FORESEE cannot be activated in this case, so we reschedule it
       Simulator::Schedule (MilliSeconds(m_FORESEE_check_ms), &foresee::FORESEEMobilityModel, this);
       return;
     }
@@ -142,6 +99,7 @@ foresee::FORESEEMobilityModel ()
   double my_y = m_vdp->getPositionXY().y;
   double my_speed = m_vdp->getSpeedValue();
   std::string my_type = m_traci->vehicle.getTypeID (m_vehicle_id);
+  std::string rv_type, rvahead_type, hvahead_type;
   // Lane normalized the lane in ETSI-based system --> 1 left-most lane, 2 center lane, 3 right-most lane
   VDPDataItem<int> my_lane = m_vdp->getLanePosition();
 
@@ -262,6 +220,7 @@ foresee::FORESEEMobilityModel ()
       bool found_coordination = false;
       // Take the four roles, target, ahead ego, ahead target
       std::string RV, HVAhead, RVAhead;
+      long RV_id = -1, RVAhead_id = -1, HVAhead_id = -1;
       // Check whether there is another maneuver coordination that is happening within the ahead range
       // If yes, ego vehicle cannot perform maneuver coordination
       for (auto it = (*m_lc_data_structure).begin(); it != (*m_lc_data_structure).end(); ++it)
@@ -288,51 +247,31 @@ foresee::FORESEEMobilityModel ()
           double x_RV, x_RVAhead, x_HVAhead;
           double y_RV, y_RVAhead, y_HVAhead;
           double speed_RV, speed_RVAhead, speed_HVAhead;
-          double min_dist_hv_ahead = 10000;
           double min_dist_rv_ahead = 10000;
           double min_dist_rv = 10000;
-          // Vehicles ahead of HV in the same lane
-          auto& vec1 = veh_per_lane[my_lane.getData()];
+          double min_dist_hv_ahead = 10000;
           // Target lane
           int target_lane = left_criterion ? my_lane.getData() - 1 : my_lane.getData() + 1;
           // Vehicles ahead of HV in the target lane
-          auto& vec2 = veh_per_lane[target_lane];
+          auto& vec1 = veh_per_lane[target_lane];
+          // Vehicles ahead of HV in the same lane
+          auto& vec2 = veh_per_lane[my_lane.getData()];
           for(auto it = vehicles.begin(); it != vehicles.end(); ++it)
             {
-              auto it_found = std::find(
-                  vec1.begin(),
-                  vec1.end(),
-                  std::to_string(it->vehData.stationID)
-              );
-              auto pos = m_traci->simulation.convertLonLattoXY (it->vehData.lon, it->vehData.lat);
-              double dist = std::sqrt (std::pow(my_x - pos.x, 2) + std::pow(my_y - pos.y, 2));
-              if (it_found != vec1.end())
+              if (it->vehData.lanePosition.getData() == target_lane)
                 {
-                  // Vehicle is in the same lane of HV ahead of ego, can be HVAhead
-                  if (dist < min_dist_hv_ahead && dist < MAX_DIST_AHEAD_BEHIND)
-                    {
-                      min_dist_hv_ahead = dist;
-                      HVAhead = "veh" + std::to_string (it->vehData.stationID);
-                      x_HVAhead = pos.x;
-                      y_HVAhead = pos.y;
-                      speed_HVAhead = it->vehData.speed_ms;
-                    }
-                }
-              else
-                {
-                  // Check for RV and RVAhead
-                  it_found = std::find(
-                      vec2.begin(),
-                      vec2.end(),
-                      std::to_string(it->vehData.stationID)
-                  );
-                  if (it_found != vec2.end())
+                  auto pos = m_traci->simulation.convertLonLattoXY (it->vehData.lon, it->vehData.lat);
+                  double dist = std::sqrt (std::pow (my_x - pos.x, 2) + std::pow (my_y - pos.y, 2));
+                  auto it_found = std::find (vec1.begin (), vec1.end (),
+                                             std::to_string (it->vehData.stationID));
+                  if (it_found != vec1.end ())
                     {
                       // Vehicle is in the target lane ahead of ego, can be RVAhead
                       if (dist < min_dist_rv_ahead && dist < MAX_DIST_AHEAD_BEHIND)
                         {
                           min_dist_rv_ahead = dist;
                           RVAhead = "veh" + std::to_string (it->vehData.stationID);
+                          RVAhead_id = it->vehData.stationID;
                           x_RVAhead = pos.x;
                           y_RVAhead = pos.y;
                           speed_RVAhead = it->vehData.speed_ms;
@@ -342,12 +281,13 @@ foresee::FORESEEMobilityModel ()
                     {
                       // Can be RV
                       OptionalDataItem<long> lane = it->vehData.lanePosition;
-                      if(lane.isAvailable() && lane.getData() == target_lane)
+                      if (lane.isAvailable () && lane.getData () == target_lane)
                         {
                           if (dist < min_dist_rv && dist < MAX_DIST_AHEAD_BEHIND)
                             {
                               min_dist_rv = dist;
                               RV = "veh" + std::to_string (it->vehData.stationID);
+                              RV_id = it->vehData.stationID;
                               x_RV = pos.x;
                               y_RV = pos.y;
                               speed_RV = it->vehData.speed_ms;
@@ -355,160 +295,328 @@ foresee::FORESEEMobilityModel ()
                         }
                     }
                 }
+              else if (it->vehData.lanePosition.getData() == my_lane.getData())
+                {
+                  auto pos = m_traci->simulation.convertLonLattoXY (it->vehData.lon, it->vehData.lat);
+                  double dist = std::sqrt (std::pow (my_x - pos.x, 2) + std::pow (my_y - pos.y, 2));
+                  auto it_found = std::find (vec2.begin (), vec2.end (),
+                                             std::to_string (it->vehData.stationID));
+                  if (it_found != vec1.end ())
+                    {
+                      // Can be HVAhead
+                      if (dist < min_dist_rv_ahead && dist < MAX_DIST_AHEAD_BEHIND)
+                        {
+                          min_dist_hv_ahead = dist;
+                          HVAhead = "veh" + std::to_string (it->vehData.stationID);
+                          HVAhead_id = it->vehData.stationID;
+                          x_HVAhead = pos.x;
+                          y_HVAhead = pos.y;
+                          speed_HVAhead = it->vehData.speed_ms;
+                        }
+                    }
+                }
             }
-          m_actors = {RV, HVAhead, RVAhead};
-          std::vector<TrajectoryItem> mp_RV;
-          std::vector<TrajectoryItem> mp_RVAhead;
-          std::vector<TrajectoryItem> mp_HVAhead;
+          std::vector<trajectoryPrediction::TrajectoryItem> mp_HV;
+          std::vector<trajectoryPrediction::TrajectoryItem> mp_RV;
+          std::vector<trajectoryPrediction::TrajectoryItem> mp_RVAhead;
           int8_t sign = my_heading == 270 ? -1 : 1;
+          bool feasible_for_RV = false, feasible_for_RVAhead = false, feasible_for_HVAhead = false;
+          double deceleration_RV, acceleration_RVAhead;
+          std::vector<trajectoryPrediction::TrajectoryItem> trajectory_RV, trajectory_RVAhead;
           // Do prediction for each actor, if present
-          if(!RV.empty()) mp_RV = predictConstantSpeed (x_RV, y_RV, speed_RV, sign, true);
-          if(!RVAhead.empty()) mp_RVAhead = predictConstantSpeed (x_RVAhead, y_RVAhead, speed_RVAhead, sign);
-          if(!HVAhead.empty()) mp_HVAhead = predictConstantSpeed (x_HVAhead, y_HVAhead, speed_HVAhead, sign);
-          std::vector<TrajectoryItem> mp_HV = predictConstantSpeed (my_x, my_y, my_speed, sign);
-          double estimated_time_hv_rv = 0, estimated_time_hv_rvahead = 0, estimated_time_hv_hvahead = 0;
-          if(!mp_RV.empty())
+          // Prediction for HV, considering a constant speed prediction model (minimum effort for HV)
+          mp_HV = m_traj_predictor->predictConstantSpeed (my_x, my_speed, -m_traci->vehicletype.getDecel (my_type), sign, trajectoryPrediction::ActorType::HV);
+
+          // Prediction for RV, considering a constant deceleration during the deceleration time, then constant speed
+          // Note that a deceleration of 0 is first used to consider the case in which no motion changes are required for RV
+          if(!RV.empty())
             {
-              estimated_time_hv_rv = estimateTimeFromPredictionIDM (
-                  mp_HV,
-                  mp_RV,
-                  std::abs(COMFORT_DECELERATION), // comfort threshold
-                  m_traci->vehicletype.getAccel (my_type),
-                  m_desired_speed,
-                  std::abs(SAFE_DECELERATION),
-                  m_traci->vehicletype.getMinGap (my_type),
-                  m_traci->vehicletype.getTau (my_type)
-              );
+              rv_type = m_traci->vehicle.getTypeID (RV);
+              double deceleration_supported = -m_traci->vehicletype.getDecel (rv_type);
+              double d = 0;
+              // The leader in this case is HV
+              double leader_length = m_traci->vehicletype.getLength (my_type);
+              // Starting with the least invasive deceleration for RV (= 0)
+              // Do multiple trial until we find a possible safe deceleration to apply
+              while (d >= deceleration_supported)
+                {
+                  std::vector<trajectoryPrediction::TrajectoryItem> trajectory = m_traj_predictor->predictConstantSpeed (x_RV, speed_RV, d, sign, trajectoryPrediction::ActorType::RV);
+                  bool evaluation = trajectoryEvaluation (mp_HV, trajectory, leader_length, m_step_time, m_negotiation_time, m_time_to_lc);
+                  if (evaluation)
+                    {
+                      feasible_for_RV = true;
+                      deceleration_RV = d;
+                      trajectory_RV = std::move(trajectory);
+                      break;
+                    }
+                  d -= ACCELERATION_STEP;
+                }
             }
-          if (!mp_RVAhead.empty())
+          else
             {
-              estimated_time_hv_rvahead = estimateTimeFromPredictionIDM (
-                  mp_RVAhead,
-                  mp_HV,
-                  std::abs(COMFORT_DECELERATION), // comfort threshold
-                  m_desired_speed,
-                  m_traci->vehicletype.getAccel (my_type),
-                  std::abs(SAFE_DECELERATION),
-                  m_traci->vehicletype.getMinGap (my_type),
-                  m_traci->vehicletype.getTau (my_type)
-              );
-            }
-          if (!mp_HVAhead.empty())
-            {
-              estimated_time_hv_hvahead = estimateTimeFromPredictionIDM (
-                  mp_HVAhead,
-                  mp_HV,
-                  std::abs(COMFORT_DECELERATION), // comfort threshold
-                  m_desired_speed,
-                  m_traci->vehicletype.getAccel (my_type),
-                  std::abs(SAFE_DECELERATION),
-                  m_traci->vehicletype.getMinGap (my_type),
-                  m_traci->vehicletype.getTau (my_type)
-              );
+              feasible_for_RV = true;
+              deceleration_RV = DEFAULT_ACC_VALUE;
             }
 
-          if (estimated_time_hv_rv == -1){
-              std::cout << "Not found for HV-RV" << std::endl;
-            }
-          if (estimated_time_hv_hvahead == -1){
-              std::cout << "Not found for HV-HVAhead" << std::endl;
-            }
-          if (estimated_time_hv_rvahead == -1){
-              std::cout << "Not found for HV-RVAhead" << std::endl;
-            }
-          // Insert in the data structure the new coordination event that is going to happen
-          // (*m_lc_data_structure)[m_vehicle_id_int] = std::make_tuple (my_heading, my_x, my_y);
-          // Simulator::Schedule (MilliSeconds(0), &foresee::doCoordination, this);
-          if (false)
+          // Prediction for RV Ahead, considering a constant acceleration during the deceleration time, then constant speed
+          // Note that an acceleration of 0 is first used to consider the case in which no motion changes are required for RV Ahead
+          if(!RVAhead.empty())
             {
-              // TraCI utility to determine whether the lane change in a certain direction is possible
-              could_change_lane = m_traci->vehicle.couldChangeLane (m_vehicle_id, lc_direction);
-              if (could_change_lane)
+              rvahead_type = m_traci->vehicle.getTypeID (RVAhead);
+              double acceleration_supported = m_traci->vehicletype.getAccel (rvahead_type);
+              double a = 0.0;
+              // The leader in this case is RVAhead
+              double leader_length = m_traci->vehicletype.getLength (rvahead_type);
+              // Starting with the least invasive acceleration for RVAhead (= 0)
+              // Do multiple trial until we find a possible safe acceleration to apply
+              while (a <= acceleration_supported)
                 {
-                  // There are not any obstacles to change lane, so do it directly
-                  // Need to convert my_lane into SUMO-based lane system
-                  int target_lane;
-                  if (left_criterion)
+                  std::vector<trajectoryPrediction::TrajectoryItem> trajectory = m_traj_predictor->predictConstantSpeed (x_RVAhead, speed_RVAhead, a, sign, trajectoryPrediction::ActorType::RVAhead);
+                  bool evaluation = trajectoryEvaluation (mp_HV, trajectory, leader_length, m_step_time, m_negotiation_time, m_time_to_lc);
+                  if (evaluation)
                     {
-                      target_lane = my_lane.getData() - 1;
+                      feasible_for_RVAhead = true;
+                      acceleration_RVAhead = a;
+                      trajectory_RVAhead = std::move(trajectory);
+                      break;
                     }
-                  else if (right_criterion)
-                    {
-                      target_lane = my_lane.getData() + 1;
-                    }
-                  target_lane = m_num_lanes - target_lane;
-                  m_traci->vehicle.changeLane (m_vehicle_id, target_lane, m_time_to_lc);
+                  a += ACCELERATION_STEP;
+                }
+            }
+          else
+            {
+              feasible_for_RVAhead = true;
+              acceleration_RVAhead = DEFAULT_ACC_VALUE;
+            }
+
+          // Prediction for HV Ahead, considering constant speed
+          if(!HVAhead.empty())
+            {
+              double delta_v = std::abs(my_speed - speed_HVAhead);
+              double current_ttc = min_dist_hv_ahead / delta_v;
+              if (current_ttc >= MIN_TTC)
+                {
+                  feasible_for_HVAhead = true;
                 }
               else
                 {
-                  // Need for a maneuver coordination
-                  auto [state, stateTraCI] = m_traci->vehicle.getLaneChangeState(m_vehicle_id, lc_direction);
-                  std::vector<uint8_t> reasons = m_traci->vehicle.getLaneChangeFailureReasons (state, stateTraCI, lc_direction);
-                  // TODO maybe use the reason in some way (sometimes is UNKNOWN)
+                  feasible_for_HVAhead = false;
+                }
+            }
+          else
+            {
+              feasible_for_HVAhead = true;
+            }
+
+
+          // If this condition is not verified,one or both the actors cannot perform the requested maneuver, it is not feasible for them
+          // The maneuver must not be executed
+          if (feasible_for_RV && feasible_for_RVAhead && feasible_for_HVAhead)
+            {
+              if (deceleration_RV != DEFAULT_ACC_VALUE || acceleration_RVAhead != DEFAULT_ACC_VALUE)
+                {
+                  // At least RV or RVAhead are present
+                  // Insert in the data structure the new coordination event that is going to happen
+                  (*m_lc_data_structure)[m_vehicle_id_int] = std::make_tuple (my_heading, my_x, my_y);
+                  uint8_t maneuver_id = left_criterion ? 12 : 13;
+                  Simulator::Schedule (MilliSeconds(0), &foresee::startCoordination, this, RV_id, RVAhead_id, HVAhead_id, left_criterion);
+                }
+              else
+                {
+                  // The maneuver is feasible but there is no RV neither RVAhead
+                  // The coordination is not needed, manually change lane
+                  target_lane = 3 - target_lane;
+                  m_traci->vehicle.changeLane (m_vehicle_id, target_lane, m_time_to_lc);
                 }
             }
         }
     }
-  if (!startManeuver) Simulator::Schedule (MilliSeconds(m_FORESEE_check_ms), &foresee::FORESEEMobilityModel, this);
+  Simulator::Schedule (MilliSeconds(m_FORESEE_check_ms), &foresee::FORESEEMobilityModel, this);
 }
 
 void
-foresee::doCoordination ()
+foresee::startCoordination (long RV_id, long RVAhead_id, long HVAhead_id, bool left_criterion)
 {
-  MCSpecification specification = {};
-  m_mcs_ptr->generateAndEncodeMCM (specification);
+  MCSpecification specification;
+  // Choose the container
+  specification.setAdviseContainer();
+  specification.setMCMItsRole (McmItssRole_coordinatingItss); // HV is the coordinator
+  if (RV_id >= 0)
+    {
+      ManoeuvreAdvice adv = {};
+      adv.executantID = static_cast<StationId_t>(RV_id);
+
+      // Allocate the CurrentStateAdvisedChange before filling it
+      CurrentStateAdvisedChange* csac = specification.create<CurrentStateAdvisedChange> ();
+      csac->present = CurrentStateAdvisedChange_PR_stayInLane;
+      csac->choice.stayInLane = 1;
+      adv.currentStateAdvisedChange = csac;
+
+      // Allocate and fill the submanoeuvre
+      Submanoeuvre_t* subm = specification.create<Submanoeuvre_t>();
+      subm->submanoeuvreId = ManeuverID::Slowdown;
+      subm->advisedTargetRoadResource = nullptr;
+      subm->advisedTrajectory = nullptr;
+
+      // Add it to adv.submaneuvres directly — no need for a separate Submanoeuvres allocation
+      specification.add (asn_DEF_Submanoeuvre, &adv.submaneuvres, subm);
+
+      specification.pushManeuverAdvice(adv);
+    }
+
+  if (RVAhead_id >= 0)
+    {
+      ManoeuvreAdvice adv = {};
+      adv.executantID = static_cast<StationId_t>(RVAhead_id);
+
+      // Allocate the CurrentStateAdvisedChange before filling it
+      CurrentStateAdvisedChange* csac = specification.create<CurrentStateAdvisedChange> ();
+      csac->present = CurrentStateAdvisedChange_PR_stayInLane;
+      csac->choice.stayInLane = 1;
+      adv.currentStateAdvisedChange = csac;
+
+      // Allocate and fill the submanoeuvre
+      Submanoeuvre_t* subm = specification.create<Submanoeuvre_t>();
+      subm->submanoeuvreId = ManeuverID::Accelerate;
+      subm->advisedTargetRoadResource = nullptr;
+      subm->advisedTrajectory = nullptr;
+
+      // Add it to adv.submaneuvres directly — no need for a separate Submanoeuvres allocation
+      specification.add (asn_DEF_Submanoeuvre, &adv.submaneuvres, subm);
+
+      specification.pushManeuverAdvice(adv);
+    }
+
+  if (HVAhead_id >= 0)
+    {
+      ManoeuvreAdvice adv = {};
+      adv.executantID = static_cast<StationId_t>(HVAhead_id);
+
+      // Allocate the CurrentStateAdvisedChange before filling it
+      CurrentStateAdvisedChange* csac = specification.create<CurrentStateAdvisedChange> ();
+      csac->present = CurrentStateAdvisedChange_PR_stayInLane;
+      csac->choice.stayInLane = 1;
+      adv.currentStateAdvisedChange = csac;
+
+      // Allocate and fill the submanoeuvre
+      Submanoeuvre_t* subm = specification.create<Submanoeuvre_t>();
+      subm->submanoeuvreId = ManeuverID::Undefined;
+      subm->advisedTargetRoadResource = nullptr;
+      subm->advisedTrajectory = nullptr;
+
+      // Add it to adv.submaneuvres directly — no need for a separate Submanoeuvres allocation
+      specification.add (asn_DEF_Submanoeuvre, &adv.submaneuvres, subm);
+
+      specification.pushManeuverAdvice(adv);
+    }
+
+  specification.setMCMConcept (0); // MCM Goal will be set
+  specification.setMCMCost (0); // Default, it is not used for this use case
+  specification.setMCMGoal (ManoeuvreCooperationGoal_localTrafficManagement); // FORESEE manages local traffic interactions
+  specification.setMCMType (McmType_request); // HV asks the others for a cooperation
+  specification.setManeuverID (left_criterion ? ManeuverID::GoToLeftLane : ManeuverID::GoToRightLane);
+  // FORESEE is designed for passenger cars and trucks
+  specification.setVehicleType (m_station_type == StationType_passengerCar ? Iso3833VehicleType_passengerCar : Iso3833VehicleType_truckStationWagon);
+  // The logic for the coordination process will be: Request -> ACK -> SYN ACK
+  m_mcs_ptr->generateAndEncodeMCM (&specification);
+  // Free the CurrentStateAdvisedChange we allocated above
+  // Simulator::Schedule(MilliSeconds(m_negotiation_time), &foresee::startCoordination, this);
+  m_termination_event = Simulator::Schedule(MilliSeconds(m_FORESEE_max_time), &foresee::terminateCoordination, this);
+  m_maneuver_execution = true;
 }
 
 void
 foresee::terminateCoordination ()
 {
-  // Clear the data structure
+  // Clear the data structure after terminating the coordination
   (*m_lc_data_structure).erase(m_vehicle_id_int);
-  Simulator::Schedule (MilliSeconds(m_FORESEE_check_ms), &foresee::FORESEEMobilityModel, this);
+  // Simulator::Schedule (MilliSeconds(m_FORESEE_check_ms), &foresee::FORESEEMobilityModel, this);
 }
 
-std::vector<foresee::TrajectoryItem>
-foresee::predictConstantSpeed(double x, double y, double speed, int8_t sign, bool is_RV)
+bool
+foresee::trajectoryEvaluation (std::vector<trajectoryPrediction::TrajectoryItem> trajectory_HV,
+                               std::vector<trajectoryPrediction::TrajectoryItem> trajectory_other,
+                               double leader_length,
+                               double step_time,
+                               double negotiation_time,
+                               double lc_duration)
 {
-  std::vector<foresee::TrajectoryItem> motion_plan;
-  if (!is_RV)
+  size_t length = trajectory_HV.size();
+  int i = 0;
+  std::vector<std::tuple<double, bool>> ttc_over_time;
+  while (i < length)
     {
-      float t = 0.5;
-      while (t <= HORIZON_TIME)
-      {
-        double delta = sign * (speed * STEP_TIME);
-        x += delta;
-        TrajectoryItem item {x, y, speed};
-        motion_plan.push_back (item);
-        t += STEP_TIME;
-      }
-    }
-  else
-    {
-      float t = 0.5;
-      while (t <= HORIZON_TIME)
+      // Exclude the negotiation time from the evaluation
+      double t = trajectory_HV[i].time;
+      if (t >= negotiation_time)
         {
-          if (t <= NEGOTIATION_TIME || t > NEGOTIATION_TIME + DECELERATION_TIME)
+          // Remember: SUMO positions refer always to the front bumper of the vehicles
+          // To get the distance between the leader back bumper and the follower front bumper, we remove the length of the leader
+          double gap = std::max (std::abs (trajectory_HV[i].x - trajectory_other[i].x) - leader_length, 0.1);
+          double delta_v = std::max (std::abs (trajectory_HV[i].speed - trajectory_other[i].speed), 0.1);
+          double ttc = gap / delta_v;
+          // Store the TTC condition predicted for the moment t
+          ttc_over_time.push_back({t, ttc >= MIN_TTC});
+        }
+      t += step_time;
+      i += 1;
+    }
+  double start_time = -1;
+  bool possible = false;
+  // We need to check whether there is a long enough window (based on lane change duration) to do the coordination safely
+  for (auto it = ttc_over_time.begin(); it != ttc_over_time.end(); ++it)
+    {
+      double t = std::get<0> (*it);
+      bool ttc = std::get<1> (*it);
+      if (start_time == -1 && ttc)
+        {
+          // Store the start time of the window
+          start_time = t;
+        }
+      else if (start_time != -1 && ttc)
+        {
+          // Start time is already present and the situation is safe
+          // We need to check the length of the window
+          double delta_t = t - start_time;
+          if (delta_t >= lc_duration)
             {
-              double delta = sign * (speed * STEP_TIME);
-              x += delta;
-              TrajectoryItem item {x, y, speed};
-              motion_plan.push_back (item);
-              t += STEP_TIME;
-            }
-          else if (t > NEGOTIATION_TIME && t <= NEGOTIATION_TIME + DECELERATION_TIME)
-            {
-              double delta = sign * (speed * STEP_TIME + 0.5 * COMFORT_DECELERATION * std::pow(STEP_TIME, 2));
-              x += delta;
-              double delta_speed = COMFORT_DECELERATION * STEP_TIME;
-              speed += delta_speed;
-              TrajectoryItem item {x, y, speed};
-              motion_plan.push_back (item);
-              t += STEP_TIME;
+              // If the time window is exceeded, we found a favorable window for the lane change
+              possible = true;
+              break;
             }
         }
+      else if (start_time != -1 && !ttc)
+        {
+          // The window is broken, we need to start again the window computation
+          // Set again the start_time
+          start_time = -1;
+        }
+      else if (start_time == -1 && !ttc)
+        {
+          continue;
+        }
     }
-  return motion_plan;
+  return possible;
+}
+
+void foresee::receiveMCM(asn1cpp::Seq<MCM> mcm, Address from, StationID_t my_stationID, StationType_t my_StationType, SignalInfo phy_info)
+{
+  std::cout<< "Received" << std::endl;
+}
+void
+foresee::addMCMRxCallback ()
+{
+  std::function<void(asn1cpp::Seq<MCM>, Address, StationID_t, StationType_t, SignalInfo)> rx_callback =
+      std::bind(&foresee::receiveMCM,
+                 this,
+                 std::placeholders::_1,
+                 std::placeholders::_2,
+                 std::placeholders::_3,
+                 std::placeholders::_4,
+                 std::placeholders::_5);
+  m_MCMReceiveCallbackExtended = rx_callback;
+  m_mcs_ptr->addMCRxCallbackExtended (m_MCMReceiveCallbackExtended);
 }
 
 }
+

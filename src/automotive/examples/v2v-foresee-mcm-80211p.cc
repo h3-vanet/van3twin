@@ -17,6 +17,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+
+#define HORIZON_TIME 8
+#define NEGOTIATION_TIME 1
+#define DECELERATION_TIME 1
+#define STEP_TIME .1
+#define LC_TIME 1.5
+
 #include "ns3/carla-module.h"
 
 #include "ns3/vector.h"
@@ -141,7 +148,7 @@ int main (int argc, char *argv[])
   NetDeviceContainer devices = wifi80211p.Install (wifiPhy, wifi80211pMac, c);
 
   // Enable saving to Wireshark PCAP traces
-  // wifiPhy.EnablePcap ("v2v-80211p-mcm", devices);
+  wifiPhy.EnablePcap ("v2v-80211p-foresee-mcm", devices.Get (0));
 
   // Set up the link between SUMO and ns-3, to make each node "mobile" (i.e., linking each ns-3 node to each moving vehicle in ns-3,
   // which corresponds to installing the network stack to each SUMO vehicle)
@@ -216,20 +223,37 @@ int main (int argc, char *argv[])
       sock=GeoNet::createGNPacketSocket(c.Get(nodeID));
       // Set the proper AC, through the specified UP
       sock->SetPriority (up);
-
-      Ptr<BSContainer> bs_container = CreateObject<BSContainer>(std::stol(vehicleID.substr(3)),StationType_passengerCar,sumoClient,false,sock);
+      StationType_t st_type = type == "Car0" ? StationType_passengerCar : StationType_lightTruck;
+      Ptr<BSContainer> bs_container = CreateObject<BSContainer>(std::stol(vehicleID.substr(3)),st_type,sumoClient,false,sock);
       // Setup the PRRsupervisor inside the BSContainer, to make each vehicle collect latency and PRR metrics
       bs_container->linkMetricSupervisor(metSup);
       // This is needed just to simplify the whole application
       bs_container->disablePRRSupervisorForGNBeacons ();
 
       // Set the function which will be called every time a CAM is received, i.e., receiveCAM()
-      bs_container->addMCMRxCallback (std::bind(&receiveMCM,std::placeholders::_1,std::placeholders::_2,std::placeholders::_3,std::placeholders::_4,std::placeholders::_5));
-      bs_container->setupContainer(true,false,false,false,true);
+      // bs_container->addMCMRxCallback (std::bind(&receiveMCM,std::placeholders::_1,std::placeholders::_2,std::placeholders::_3,std::placeholders::_4,std::placeholders::_5));
+      bs_container->setupContainer(true,false,false,false,true,false);
 
       // Store the container for this vehicle inside a local global BSMap, i.e., a structure (similar to a hash table) which allows you to easily
       // retrieve the right BSContainer given a vehicle ID
       basicServices.add(bs_container);
+
+      lc_model[nodeID].setDesiredSpeed (speed);
+      lc_model[nodeID].setNode(c.Get(nodeID));
+      lc_model[nodeID].setStationType(st_type);
+      lc_model[nodeID].setLDM (bs_container->getLDM());
+      lc_model[nodeID].setVDP (bs_container->getVDP());
+      lc_model[nodeID].setVehicleID (vehicleID);
+      lc_model[nodeID].setTraciAPI(sumoClient);
+      lc_model[nodeID].setNumberOfLanes();
+      lc_model[nodeID].setCurrentLCData(&lc_data_structure);
+      lc_model[nodeID].setCoordinationAvoidanceRange(ca_range);
+      lc_model[nodeID].setMCBasicService(bs_container->getMCBasicService());
+      lc_model[nodeID].addMCMRxCallback ();
+      lc_model[nodeID].setStartTime(10);
+      std::string my_type = sumoClient->vehicle.getTypeID (vehicleID);
+      lc_model[nodeID].setTrajectoryPredictor(HORIZON_TIME, STEP_TIME, NEGOTIATION_TIME, DECELERATION_TIME, LC_TIME, foresee::PredictionType::CONSTANT_SPEED);
+      lc_model[nodeID].WrapperFORESEEMobilityModel();
 
       // Start transmitting CAMs
       // We randomize the instant in time in which the CAM dissemination is going to start
@@ -240,18 +264,6 @@ int main (int argc, char *argv[])
       double desync = ((double)std::rand()/RAND_MAX);
       bs_container->getCABasicService ()->startCamDissemination (desync);
       // bs_container->getMCBasicService()->startMCMDissemination(desync);
-
-      lc_model[nodeID].setDesiredSpeed (speed);
-      lc_model[nodeID].setLDM (bs_container->getLDM());
-      lc_model[nodeID].setVDP (bs_container->getVDP());
-      lc_model[nodeID].setVehicleID (vehicleID);
-      lc_model[nodeID].setTraciAPI(sumoClient);
-      lc_model[nodeID].setNumberOfLanes();
-      lc_model[nodeID].setCurrentLCData(&lc_data_structure);
-      lc_model[nodeID].setCoordinationAvoidanceRange(ca_range);
-      lc_model[nodeID].setMCBasicService(bs_container->getMCBasicService());
-      lc_model[nodeID].setStartTime(10);
-      lc_model[nodeID].WrapperFORESEEMobilityModel();
 
       return c.Get(nodeID);
     };
