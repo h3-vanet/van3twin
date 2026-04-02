@@ -18,11 +18,13 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#define HORIZON_TIME 8
-#define NEGOTIATION_TIME 1
-#define DECELERATION_TIME 1
-#define STEP_TIME .1
-#define LC_TIME 1.5
+
+#define HORIZON_TIME 8000
+#define NEGOTIATION_TIME 1000
+#define DECELERATION_TIME 1000
+#define STEP_TIME 100
+#define LC_TIME_MSEC 1500
+
 
 #include "ns3/carla-module.h"
 
@@ -74,7 +76,7 @@ int main (int argc, char *argv[])
   int txPower = 33.0; // IEEE 802.11p transmission power in dBm (default: 23 dBm)
   xmlDocPtr rou_xml_file;
   double simTime = 100.0; // Total simulation time (default: 100 seconds)
-  bool sumo_gui = false;
+  bool sumo_gui = true;
 
   // Set here the path to the SUMO XML files
   std::string sumo_folder = "src/automotive/examples/sumo_files_v2v_foresee/";
@@ -200,8 +202,8 @@ int main (int argc, char *argv[])
   double max_speed_trucks = avg_speed_trucks * (1.0 + deviation);
 
   // Random number generator
-  std::random_device rd;
-  std::mt19937 gen(rd());  // Mersenne Twister engine
+  const unsigned int SEED = 42;
+  std::mt19937 gen(SEED);
   std::uniform_real_distribution<double> dist1(min_speed_cars, max_speed_cars);
   std::uniform_real_distribution<double> dist2(min_speed_trucks, max_speed_trucks);
 
@@ -252,7 +254,8 @@ int main (int argc, char *argv[])
       lc_model[nodeID].addMCMRxCallback ();
       lc_model[nodeID].setStartTime(10);
       std::string my_type = sumoClient->vehicle.getTypeID (vehicleID);
-      lc_model[nodeID].setTrajectoryPredictor(HORIZON_TIME, STEP_TIME, NEGOTIATION_TIME, DECELERATION_TIME, LC_TIME, foresee::PredictionType::CONSTANT_SPEED);
+      lc_model[nodeID].setTrajectoryPredictor(HORIZON_TIME, STEP_TIME, NEGOTIATION_TIME, DECELERATION_TIME, LC_TIME_MSEC, foresee::PredictionType::CONSTANT_SPEED);
+
       lc_model[nodeID].WrapperFORESEEMobilityModel();
 
       // Start transmitting CAMs

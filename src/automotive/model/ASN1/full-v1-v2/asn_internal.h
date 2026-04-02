@@ -42,7 +42,9 @@ int get_asn1c_environment_version(void);	/* Run-time version */
 #define	REALLOC(oldptr, size)	realloc(oldptr, size)
 #define	FREEMEM(ptr)		free(ptr)
 
-// #define	asn_debug_indent	0
+// UNCOMMENT THIS
+//#define	asn_debug_indent	0
+
 #define ASN_DEBUG_INDENT_ADD(i) do{}while(0)
 
 #ifdef  EMIT_ASN_DEBUG
@@ -63,7 +65,9 @@ int get_asn1c_environment_version(void);	/* Run-time version */
 #else	/* !ASN_THREAD_SAFE */
 #undef  ASN_DEBUG_INDENT_ADD
 #undef  asn_debug_indent
-extern int asn_debug_indent;
+// UNCOMMENT THIS
+//extern int asn_debug_indent;
+
 #define ASN_DEBUG_INDENT_ADD(i) do { asn_debug_indent += i; } while(0)
 #endif	/* ASN_THREAD_SAFE */
 #define	ASN_DEBUG(fmt, args...)	do {			\

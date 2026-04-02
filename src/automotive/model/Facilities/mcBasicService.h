@@ -75,7 +75,7 @@ enum ManeuverID
   public:
     MCSpecification()
         : m_mcm_type(0), m_mcm_its_role(0), m_mcm_status(0),
-          m_mcm_concept(0), m_mcm_goal(0), m_mcm_cost(0),
+          m_mcm_concept(0), m_mcm_goal(0), m_maneuver_id(Undefined), m_mcm_cost(0),
           m_vehicle_maneuver_container(false),
           m_vehicle_advise_container(false),
           m_vehicle_acknowledgement_container(false),
@@ -132,19 +132,19 @@ enum ManeuverID
     ManeuverID getManeuverID() { return m_maneuver_id; };
     void setVehicleType(Iso3833VehicleType type) { m_vehicle_type = type; };
     Iso3833VehicleType getVehicleType() { return m_vehicle_type; };
-    void pushSubmaneuverDescription(const SubmanoeuvreDescription& item)
+    void pushSubmaneuverDescription(SubmanoeuvreDescription* item)
     {
       m_submaneuver_description.push_back(item);
     };
-    std::vector<SubmanoeuvreDescription>& getSubmaneuverDescription()
+    std::vector<SubmanoeuvreDescription*>& getSubmaneuverDescription()
     {
       return m_submaneuver_description;
     };
-    void pushManeuverAdvice(const ManoeuvreAdvice& item)
+    void pushManeuverAdvice(ManoeuvreAdvice* item)
     {
       m_maneuver_advice.push_back(item);
     };
-    std::vector<ManoeuvreAdvice>& getManeuverAdvice()
+    std::vector<ManoeuvreAdvice*>& getManeuverAdvice()
     {
       return m_maneuver_advice;
     };
@@ -162,8 +162,9 @@ enum ManeuverID
     bool m_vehicle_acknowledgement_container;
     bool m_vehicle_response_container;
     bool m_vehicle_terminator_container;
-    std::vector<SubmanoeuvreDescription> m_submaneuver_description; // For Vehicle Maneuver Container
-    std::vector<ManoeuvreAdvice> m_maneuver_advice; // For Vehicle Maneuver Container and Vehicle Advice Container
+    std::vector<SubmanoeuvreDescription*> m_submaneuver_description; // For Vehicle Maneuver Container
+    std::vector<ManoeuvreAdvice*> m_maneuver_advice; // For Vehicle Maneuver Container and Vehicle Advice Container
+
     Iso3833VehicleType m_vehicle_type;
     long m_mcm_response;
   };
