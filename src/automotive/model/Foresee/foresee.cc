@@ -120,7 +120,7 @@ std::tuple<double, double> foresee::computeRequiredDeceleration(double speed_lea
   return {lo, delta_t}; // minimum deceleration
 }
 
-/* void
+void
 foresee::setTrajectoryPredictor (int horizon_time, int step_time, int negotiation_time,
                                  int deceleration_time, int lc_duration, PredictionType prediction_type)
 {
@@ -129,7 +129,7 @@ foresee::setTrajectoryPredictor (int horizon_time, int step_time, int negotiatio
   m_negotiation_time = negotiation_time;
   m_time_to_lc = lc_duration;
   m_prediction_type = prediction_type;
-} */
+}
 
 void
 foresee::addMCMRxCallback ()
