@@ -12,10 +12,13 @@
 
 ns-3 modules to build and simulate ETSI-compliant VANET (V2X) applications using SUMO (v-1.6.0+) and ns-3 (ns-3-dev, version supporting the NR-V2X module by CTTC), with the possibility of easily switching stack and communication technology.
 
-It has been tested with SUMO v1.6.0, v1.7.0, v1.8.0, v1.12.0, v1.18.0 on Ubuntu 20.04 and 22.04.
-Back compatibility **is not** ensured with new versions of TraCI and Ubuntu 24.04 is **not** officially supported yet.
+The Ubuntu versions tested with VaN3Twin are: Ubuntu 20.04, Ubuntu 22.04, Ubuntu 24.04 (for the latter, see later how to properly configure ns-3).
 
-**Contacts, developers, project coordination**: Marco MALINVERNO [marco.malinverno1@gmail.com], Francesco RAVIGLIONE [francescorav.es483@gmail.com], Carlos Mateo RISMA CARLETTI [carlosrisma@gmail.com], Diego GASCO [diego.gasco@polito.it], Roberto PEGURRI [roberto.pegurri@mail.polimi.it], Alessandro GENOVESE [alessandro.genovese@icloud.com], Alessandro GIACCAGLINI [alessandro.giaccaglini@gmail.com], Marco RAPELLI [rapelli.m@libero.it], Francesco LINSALATA [francesco.linsalata@polimi.it], Eugenio MORO [eugenio.moro@polimi.it], Claudio CASETTI [claudio.casetti@polito.it], Carla-Fabiana CHIASSERINI [carla.chiasserini@polito.it]
+It has been tested with SUMO v1.6.0, v1.7.0, v1.8.0, v1.12.0, v1.18.0.
+
+Back compatibility **is not** ensured with new versions of TraCI.
+
+**Contacts, developers, project coordination**: Marco MALINVERNO [marco.malinverno1@gmail.com], Francesco RAVIGLIONE [francescorav.es483@gmail.com], Carlos Mateo RISMA CARLETTI [carlosrisma@gmail.com], Diego GASCO [diego.gasco@polito.it, diego.gasco99@gmail.com], Roberto PEGURRI [roberto.pegurri@mail.polimi.it], Alessandro GENOVESE [alessandro.genovese@icloud.com], Alessandro GIACCAGLINI [alessandro.giaccaglini@gmail.com], Marco RAPELLI [rapelli.m@libero.it], Francesco LINSALATA [francesco.linsalata@polimi.it], Eugenio MORO [eugenio.moro@polimi.it], Claudio CASETTI [claudio.casetti@polito.it], Carla-Fabiana CHIASSERINI [carla.chiasserini@polito.it]
 
 This project is licensed under a GPL-2.0 License. Please see also the `LICENSE` file for more details.
 
@@ -63,6 +66,10 @@ or
 This script will download the proper version of ns-3-dev and install this framework. The folder `ns-3-dev` will remain linked to this GitHub repository (not to the vanilla ns-3-dev one), allowing you to more easily develop updates and possibile contributions to *VaN3Twin*.
     
 * Configure `ns3` to build the framework with `<ns3-folder>./ns3 configure --build-profile=optimized --enable-examples --enable-tests --disable-python (add here what you want to enable)"` - The usage of the optimized profile allows to speed up the simulation time. This command should be launched from inside the `ns-3-dev` folder.
+
+* Suggested build profiles are `optimized` and `debug`. The first profile significantly speeds up the run time execution, while the second is more useful during the development phase.
+
+* **Important**: If you are compiling VaN3Twin on Ubuntu 24.04 LTS, you need to add `CXXFLAGS="-include cstdint"` before the `./ns3 configure` command. 
 
 * **Important**: If you are compiling VaN3Twin on Ubuntu 22.04 LTS or later, you need to specify, when calling `./ns3 configure`, also the `--disable-werror` flag
 
