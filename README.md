@@ -12,7 +12,8 @@
 
 ns-3 modules to build and simulate ETSI-compliant VANET (V2X) applications using SUMO (v-1.6.0+) and ns-3 (ns-3-dev, version supporting the NR-V2X module by CTTC), with the possibility of easily switching stack and communication technology.
 
-The Ubuntu versions tested with VaN3Twin are: Ubuntu 20.04, Ubuntu 22.04, Ubuntu 24.04 (for the latter, see later how to properly configure ns-3).
+Ubuntu has been selected and tested as the main Linux distro for VaN3Twin.
+Ubuntu's versions tested with VaN3Twin are: Ubuntu 20.04, Ubuntu 22.04, Ubuntu 24.04 (for the latter, see later how to properly configure ns-3 for it).
 
 It has been tested with SUMO v1.6.0, v1.7.0, v1.8.0, v1.12.0, v1.18.0.
 
@@ -33,8 +34,8 @@ VaN3Twin now integrates the whole ms-van3t framework, and much more, keeping the
 
 To build the project:
 * Install SUMO following the guide at [https://sumo.dlr.de/wiki/Downloads](https://sumo.dlr.de/wiki/Downloads)
-    * You can use 
-    
+    * You can use:
+
     	`sudo add-apt-repository ppa:sumo/stable`  
     	`sudo apt update`  
     	`sudo apt install sumo sumo-tools sumo-doc`  
@@ -69,7 +70,7 @@ This script will download the proper version of ns-3-dev and install this framew
 
 * Suggested build profiles are `optimized` and `debug`. The first profile significantly speeds up the run time execution, while the second is more useful during the development phase.
 
-* **Important**: If you are compiling VaN3Twin on Ubuntu 24.04 LTS, you need to add `CXXFLAGS="-include cstdint"` before the `./ns3 configure` command. 
+* **Important**: If you are compiling VaN3Twin on Ubuntu 24.04 LTS, you need to add `CXXFLAGS="-include cstdint"` to the configure command, as follows: `CXXFLAGS="-include cstdint" ./ns3 configure ...` 
 
 * **Important**: If you are compiling VaN3Twin on Ubuntu 22.04 LTS or later, you need to specify, when calling `./ns3 configure`, also the `--disable-werror` flag
 
