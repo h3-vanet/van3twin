@@ -164,7 +164,7 @@ Visual Studio Code can be easily installed with the [Microsoft Visual Studio Cod
 
 * Install the CMake Tools extension by Microsoft.
 
-* Install clangd extension by LLVM, and then, when required, install also the clangd server.
+* Install `clangd` extension by LLVM, and then, when required, install also the `clangd` server.
 
 * Go to the Command Palette (Ctrl+Shift+P) and select: > CMake: Open CMake Settings (JSON)
 
@@ -187,14 +187,15 @@ Visual Studio Code can be easily installed with the [Microsoft Visual Studio Cod
   ```
 * Save the settings.json
 * Go to the Command Palette (Ctrl+Shift+P) and select: > CMake: Delete Cache and Reconfigure
+* **Important**: you sometimes might need to run the above command to refresh the project, especially when you modify a `.h` file
 * In the `.vscode/` folder you can find three files: settings.json, task.json, and launch.json
-* To configure launch parameters, refer to `.vscode/settings.json`, particularly in the `cmake.debugConfig` section, where you can set the working directory and other debug configurations.
-* To build a specific target, go to the Command Palette (Ctrl+Shift+P) and select: > CMake: Build Target, then choose the desired target (e.g. v2i-areaSpeedAdvisor-80211p).
-* The selected target will be the default one for the next run/debug commands. To change it, repeat the previous step and select a different target.
-* You can also change the target by directly open the left sidebar, clicking on the CMake Projects tab, and selecting the desired target from the list of available targets.
-* To run/debug the selected target, you can use the standard Visual Studio Code debug options (e.g., F5 to start debugging, Ctrl+F5 to run without debugging), or the button in the toolbar.
-* If you want to run the simulation with display forwarding, in `.vscode/settings.json`, add to `cmake.debugConfig` the following line: `"env": {"DISPLAY": "yourdisplay", "LIBGL_ALWAYS_INDIRECT": "1"}`. Then in your Visual Studio Code terminal, before running the simulation, set the DISPLAY variable with the command: `export DISPLAY=yourdisplay` (this operation must be done for each run/debug launch).
-
+* To configure launch parameters, refer to `.vscode/settings.json`, particularly in the `cmake.debugConfig` section, where you can set the working directory and other debug configurations
+* To build a specific target, go to the Command Palette (Ctrl+Shift+P) and select: > CMake: Build Target, then choose the desired target (e.g. v2i-areaSpeedAdvisor-80211p)
+* The selected target will be the default one for the next run/debug commands. To change it, repeat the previous step and select a different target
+* You can also change the target by directly open the left sidebar, clicking on the CMake Projects tab, and selecting the desired target from the list of available targets
+* To run/debug the selected target, you can use the standard Visual Studio Code debug options (e.g., F5 to start debugging, Ctrl+F5 to run without debugging), or the button in the toolbar
+* If you want to run the simulation with display forwarding, in `.vscode/settings.json`, add to `cmake.debugConfig` the following line: `"env": {"DISPLAY": "yourdisplay", "LIBGL_ALWAYS_INDIRECT": "1"}`. Then in your Visual Studio Code terminal, before running the simulation, set the DISPLAY variable with the command: `export DISPLAY=yourdisplay` (this operation must be done for each run/debug launch)
+* **Important**: while using Visual Studio Code you might sometimes need to refresh `clangd` server (through Command Palette (Ctrl+Shift+P) and select: > clangd: Restart language server) 
 
 # VaN3Twin-CARLA extension
 
@@ -202,7 +203,7 @@ In addition to SUMO and GPS traces VaN3Twin supports the use of CARLA for mobili
 
 **System requirements**
 
-We highly recommend running VaN3Twin-CARLA on Ubuntu 20.04 (used for developing the framework) or Ubuntu 18.04, Ubuntu 22.04 is not officially supported by CARLA. If both CARLA and OpenCDA need to be installed we recommend at least 35GB of free space on your system. For smooth execution of simulation (especially if AI/ML models are leveraged for the perception simulation) we recommend using a GPU with at least 8GB of memory.
+We highly recommend running VaN3Twin-CARLA on Ubuntu 20.04 (used for developing the framework), Ubuntu 18.04, or Ubuntu 22.04, while Ubuntu 24.04 is not officially supported by CARLA. If both CARLA and OpenCDA need to be installed we recommend at least 35GB of free space on your system. For smooth execution of simulation (especially if AI/ML models are leveraged for the perception simulation) we recommend using a GPU with at least 8GB of memory.
 The version of CARLA supported by VaN3Twin-CARLA is CARLA 0.9.12.
 
 **Installing VaN3Twin-CARLA**
