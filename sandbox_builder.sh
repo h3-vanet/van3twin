@@ -154,27 +154,27 @@ set -v
 rm -rfv AUTHORS .git .gitignore img LICENSE license_gplv2.txt README.md src switch_ETSI_version.sh VERSION enable_v2x_emulator.sh
 set +v
 
-echo "Extending available path loss models..."
+#echo "Extending available path loss models..."
 sleep 1
-set -v
+# set -v
 cd ns-3-dev
-cp src/automotive/propagation-extended/cni-urbanmicrocell-propagation-loss-model.cc src/propagation/model/
-cp src/automotive/propagation-extended/cni-urbanmicrocell-propagation-loss-model.h src/propagation/model/
-cp src/automotive/propagation-extended/CMakeLists.txt src/propagation/
+# cp src/automotive/propagation-extended/cni-urbanmicrocell-propagation-loss-model.cc src/propagation/model/
+# cp src/automotive/propagation-extended/cni-urbanmicrocell-propagation-loss-model.h src/propagation/model/
+# cp src/automotive/propagation-extended/CMakeLists.txt src/propagation/
 
-echo "Copying propagation files for NVIDIA Sionna..."
-sleep 1
-cp src/sionna/files/propagation/CMakeLists.txt src/propagation/
-cp src/sionna/files/propagation/propagation-delay-model.cc src/propagation/model/
-cp src/sionna/files/propagation/propagation-delay-model.h src/propagation/model/
-cp src/sionna/files/propagation/propagation-loss-model.cc src/propagation/model/
-cp src/sionna/files/propagation/propagation-loss-model.h src/propagation/model/
-cp src/sionna/files/propagation/three-gpp-propagation-loss-model.h src/propagation/model
-cp src/sionna/files/propagation/three-gpp-propagation-loss-model.cc src/propagation/model
-cp src/sionna/files/spectrum/CMakeLists.txt src/spectrum/
-cp src/sionna/files/spectrum/three-gpp-spectrum-propagation-loss-model.cc src/spectrum/model
+# echo "Copying propagation files for NVIDIA Sionna..."
+# sleep 1
+# cp src/sionna/files/propagation/CMakeLists.txt src/propagation/
+# cp src/sionna/files/propagation/propagation-delay-model.cc src/propagation/model/
+# cp src/sionna/files/propagation/propagation-delay-model.h src/propagation/model/
+# cp src/sionna/files/propagation/propagation-loss-model.cc src/propagation/model/
+# cp src/sionna/files/propagation/propagation-loss-model.h src/propagation/model/
+# cp src/sionna/files/propagation/three-gpp-propagation-loss-model.h src/propagation/model
+# cp src/sionna/files/propagation/three-gpp-propagation-loss-model.cc src/propagation/model
+# cp src/sionna/files/spectrum/CMakeLists.txt src/spectrum/
+# cp src/sionna/files/spectrum/three-gpp-spectrum-propagation-loss-model.cc src/spectrum/model
 
-cp src/automotive/model/TxTracker/channel_files/modified/yans-wifi-phy.h src/wifi/model
+# cp src/automotive/model/TxTracker/channel_files/modified/yans-wifi-phy.h src/wifi/model
 
 echo "Extending Signal Info features..."
 sleep 1
