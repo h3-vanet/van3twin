@@ -1,6 +1,5 @@
 # Main src wscript
 /src/wscript
-.vscode/*
 # Misc files
 /DlRlcStats.txt
 /UlRlcStats.txt
