@@ -21,7 +21,9 @@
 //#include "ns3/cv2x_lte-spectrum-phy.h"
 #include "ns3/node.h"
 #include "ns3/config.h"
+#ifdef HAVE_SIONNA
 #include "ns3/sionna-connection-handler.h"
+#endif
 #include "ns3/constant-position-mobility-model.h"
 #include "ns3/yans-wifi-phy.h"
 #include "ns3/wifi-mac.h"

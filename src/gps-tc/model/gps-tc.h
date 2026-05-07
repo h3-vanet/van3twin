@@ -14,7 +14,9 @@
 #include "ns3/core-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/traci-module.h"
+#ifdef HAVE_SIONNA
 #include "ns3/sionna-connection-handler.h"
+#endif
 
 #include "ns3/vehicle-visualizer.h"
 
