@@ -140,11 +140,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy compiled artifacts AND the cmake cache so "./ns3 run" can find
-# the generator and resolve scenario paths.
-COPY --from=builder /build/ns-3-dev/build      /opt/ns3/build
-COPY --from=builder /build/ns-3-dev/cmake-cache /opt/ns3/cmake-cache
-COPY --from=builder /build/ns-3-dev/ns3        /opt/ns3/ns3
+# Keep the same path as the build stage so all hardcoded paths inside
+# CMakeCache.txt remain valid without any sed fixup.
+COPY --from=builder /build/ns-3-dev/build      /build/ns-3-dev/build
+COPY --from=builder /build/ns-3-dev/cmake-cache /build/ns-3-dev/cmake-cache
+COPY --from=builder /build/ns-3-dev/ns3        /build/ns-3-dev/ns3
 
-WORKDIR /opt/ns3
+WORKDIR /build/ns-3-dev
 
-ENV LD_LIBRARY_PATH=/opt/ns3/build/lib
+ENV LD_LIBRARY_PATH=/build/ns-3-dev/build/lib
