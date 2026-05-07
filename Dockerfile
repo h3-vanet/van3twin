@@ -13,7 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         cmake \
         ninja-build \
         git \
-        ca-certificates \
         ccache \
         python3 \
         pkg-config \
@@ -40,14 +39,9 @@ RUN git clone --depth=1 -b nr-v2x-dev \
     || true
 
 # ── Merge VaN3Twin custom modules ─────────────────────────────────────────────
-# Clone VaN3Twin so the Dockerfile is self-contained and works regardless of
-# where "docker build" is invoked.  Override VAN3TWIN_REF to pin a specific
-# branch or tag (e.g. --build-arg VAN3TWIN_REF=my-branch).
-ARG VAN3TWIN_REF=master
-RUN git clone --depth=1 -b ${VAN3TWIN_REF} \
-        https://github.com/h3-vanet/VaN3Twin.git /van3twin \
-    && cp -rf /van3twin/src/. /build/ns-3-dev/src/ \
-    && rm -rf /van3twin
+# Replaces the "cp -af ./!(ns-3-dev) ns-3-dev/" step in sandbox_builder.sh
+# by copying only the source modules that ns-3 needs.
+COPY src/ /build/ns-3-dev/src/
 
 WORKDIR /build/ns-3-dev
 
@@ -110,8 +104,7 @@ RUN cp src/automotive/model/SignalInfo/LTE/lte-spectrum-phy.cc src/lte/model/ \
 RUN ./ns3 configure \
         --build-profile=optimized \
         --disable-tests \
-        --disable-python \
-        --disable-examples
+        --disable-python
 
 RUN ./ns3 build -j"$(nproc)"
 
