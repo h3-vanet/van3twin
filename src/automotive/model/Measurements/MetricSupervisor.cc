@@ -577,6 +577,7 @@ MetricSupervisor::checkCBR ()
             }
         }
     }
+#ifdef HAVE_CARLA
   else if (m_carla_ptr != nullptr)
     {
       std::map<std::string,std::string> obj_node_map = m_carla_ptr->getManagedConnectedNodes();
@@ -633,6 +634,7 @@ MetricSupervisor::checkCBR ()
             }
         }
     }
+#endif // HAVE_CARLA
   else if (!m_v_gpstc.empty())
     {
       for (auto gpstc_ptr = m_v_gpstc.begin(); gpstc_ptr != m_v_gpstc.end(); ++gpstc_ptr)
