@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         cmake \
         ninja-build \
         git \
+        ca-certificates \
         ccache \
         python3 \
         pkg-config \
