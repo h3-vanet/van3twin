@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libsqlite3-dev \
         libxml2-dev \
         libssl-dev \
+        libboost-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Clone upstream ns-3 ───────────────────────────────────────────────────────
@@ -39,9 +40,16 @@ RUN git clone --depth=1 -b nr-v2x-dev \
     || true
 
 # ── Merge VaN3Twin custom modules ─────────────────────────────────────────────
-# Replaces the "cp -af ./!(ns-3-dev) ns-3-dev/" step in sandbox_builder.sh
-# by copying only the source modules that ns-3 needs.
-COPY src/ /build/ns-3-dev/src/
+# Clone VaN3Twin so the Dockerfile is self-contained and works regardless of
+# where "docker build" is invoked.  Override VAN3TWIN_REF to pin a specific
+# branch or tag (e.g. --build-arg VAN3TWIN_REF=my-branch).
+# Default to the fix branch until this PR is merged into master.
+# After merge, change back to: ARG VAN3TWIN_REF=master
+ARG VAN3TWIN_REF=claude/docker-build-fix
+RUN git clone --depth=1 -b ${VAN3TWIN_REF} \
+        https://github.com/h3-vanet/VaN3Twin.git /van3twin \
+    && cp -rf /van3twin/src/. /build/ns-3-dev/src/ \
+    && rm -rf /van3twin
 
 WORKDIR /build/ns-3-dev
 
@@ -117,8 +125,8 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Runtime libs only – same Ubuntu base ensures ABI compatibility with the
-# shared objects produced by the builder stage.
+# Runtime libs + cmake/ninja so that "./ns3 run" can locate the build
+# and execute pre-built scenarios without recompiling.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgsl27 \
         libgslcblas0 \
@@ -126,12 +134,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libsqlite3-0 \
         libxml2 \
         python3 \
+        cmake \
+        ninja-build \
         sumo \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy only the compiled artifacts; the multi-MB source tree is left behind.
-COPY --from=builder /build/ns-3-dev/build /opt/ns3/build
-COPY --from=builder /build/ns-3-dev/ns3   /opt/ns3/ns3
+# Copy compiled artifacts AND the cmake cache so "./ns3 run" can find
+# the generator and resolve scenario paths.
+COPY --from=builder /build/ns-3-dev/build      /opt/ns3/build
+COPY --from=builder /build/ns-3-dev/cmake-cache /opt/ns3/cmake-cache
+COPY --from=builder /build/ns-3-dev/ns3        /opt/ns3/ns3
 
 WORKDIR /opt/ns3
 
