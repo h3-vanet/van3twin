@@ -127,8 +127,8 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Runtime libs only – same Ubuntu base ensures ABI compatibility with the
-# shared objects produced by the builder stage.
+# Runtime libs + cmake/ninja so that "./ns3 run" can locate the build
+# and execute pre-built scenarios without recompiling.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgsl27 \
         libgslcblas0 \
@@ -136,12 +136,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libsqlite3-0 \
         libxml2 \
         python3 \
+        cmake \
+        ninja-build \
         sumo \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy only the compiled artifacts; the multi-MB source tree is left behind.
-COPY --from=builder /build/ns-3-dev/build /opt/ns3/build
-COPY --from=builder /build/ns-3-dev/ns3   /opt/ns3/ns3
+# Copy compiled artifacts AND the cmake cache so "./ns3 run" can find
+# the generator and resolve scenario paths.
+COPY --from=builder /build/ns-3-dev/build      /opt/ns3/build
+COPY --from=builder /build/ns-3-dev/cmake-cache /opt/ns3/cmake-cache
+COPY --from=builder /build/ns-3-dev/ns3        /opt/ns3/ns3
 
 WORKDIR /opt/ns3
 
