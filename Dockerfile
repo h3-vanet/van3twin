@@ -44,7 +44,9 @@ RUN git clone --depth=1 -b nr-v2x-dev \
 # Clone VaN3Twin so the Dockerfile is self-contained and works regardless of
 # where "docker build" is invoked.  Override VAN3TWIN_REF to pin a specific
 # branch or tag (e.g. --build-arg VAN3TWIN_REF=my-branch).
-ARG VAN3TWIN_REF=master
+# Default to the fix branch until this PR is merged into master.
+# After merge, change back to: ARG VAN3TWIN_REF=master
+ARG VAN3TWIN_REF=claude/docker-build-fix
 RUN git clone --depth=1 -b ${VAN3TWIN_REF} \
         https://github.com/h3-vanet/VaN3Twin.git /van3twin \
     && cp -rf /van3twin/src/. /build/ns-3-dev/src/ \
