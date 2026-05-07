@@ -110,7 +110,8 @@ RUN cp src/automotive/model/SignalInfo/LTE/lte-spectrum-phy.cc src/lte/model/ \
 RUN ./ns3 configure \
         --build-profile=optimized \
         --disable-tests \
-        --disable-python
+        --disable-python \
+        --disable-examples
 
 RUN ./ns3 build -j"$(nproc)"
 
