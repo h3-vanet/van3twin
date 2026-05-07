@@ -144,6 +144,7 @@ MetricSupervisor::signalSentPacket(std::string buf, double lat, double lon, uint
             }
         }
     }
+#ifdef HAVE_CARLA
   else if(m_carla_ptr != nullptr)
     {
 
@@ -173,6 +174,7 @@ MetricSupervisor::signalSentPacket(std::string buf, double lat, double lon, uint
             }
         }
     }
+#endif // HAVE_CARLA
   else
     {
       // TODO handle the PRR for gps-tc module
@@ -818,6 +820,7 @@ MetricSupervisor::channelOccupationBytesPerSecondsPerSquareMeter ()
           m_total_area = totalArea;
         }
     }
+#ifdef HAVE_CARLA
   else if (m_carla_ptr != nullptr)
     {
       if (m_total_area == 0)
@@ -834,6 +837,7 @@ MetricSupervisor::channelOccupationBytesPerSecondsPerSquareMeter ()
           m_total_area = totalArea;
         }
     }
+#endif // HAVE_CARLA
   else
     {
       NS_FATAL_ERROR("Fatal error: mobility client not set in Metric Supervisor.");
