@@ -40,9 +40,14 @@ RUN git clone --depth=1 -b nr-v2x-dev \
     || true
 
 # ── Merge VaN3Twin custom modules ─────────────────────────────────────────────
-# Replaces the "cp -af ./!(ns-3-dev) ns-3-dev/" step in sandbox_builder.sh
-# by copying only the source modules that ns-3 needs.
-COPY src/ /build/ns-3-dev/src/
+# Clone VaN3Twin so the Dockerfile is self-contained and works regardless of
+# where "docker build" is invoked.  Override VAN3TWIN_REF to pin a specific
+# branch or tag (e.g. --build-arg VAN3TWIN_REF=my-branch).
+ARG VAN3TWIN_REF=main
+RUN git clone --depth=1 -b ${VAN3TWIN_REF} \
+        https://github.com/h3-vanet/VaN3Twin.git /van3twin \
+    && cp -rf /van3twin/src/. /build/ns-3-dev/src/ \
+    && rm -rf /van3twin
 
 WORKDIR /build/ns-3-dev
 
