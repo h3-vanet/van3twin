@@ -142,9 +142,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy compiled artifacts AND the cmake cache so "./ns3 run" can find
 # Keep the same path as the build stage so all hardcoded paths inside
 # CMakeCache.txt remain valid without any sed fixup.
-COPY --from=builder /build/ns-3-dev/build      /build/ns-3-dev/build
-COPY --from=builder /build/ns-3-dev/cmake-cache /build/ns-3-dev/cmake-cache
-COPY --from=builder /build/ns-3-dev/ns3        /build/ns-3-dev/ns3
+COPY --from=builder /build/ns-3-dev/build        /build/ns-3-dev/build
+COPY --from=builder /build/ns-3-dev/cmake-cache  /build/ns-3-dev/cmake-cache
+COPY --from=builder /build/ns-3-dev/ns3          /build/ns-3-dev/ns3
+# cmake --build checks that CMakeLists.txt exists in CMAKE_HOME_DIRECTORY
+# (stored in CMakeCache.txt) before handing off to ninja; copy it to satisfy
+# that sanity check without bringing in the full source tree.
+COPY --from=builder /build/ns-3-dev/CMakeLists.txt /build/ns-3-dev/CMakeLists.txt
 
 WORKDIR /build/ns-3-dev
 

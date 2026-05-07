@@ -1579,6 +1579,7 @@ set(header_files
         helper/simpleCAMSender-helper.h
         helper/simpleVAMSender-helper.h
         model/utilities/OpenCDAClient.h
+        model/utilities/carla-module.h
 
         # OpenCDA/CARLA headers - installed only when the carla module is present
         # helper/cooperativePerception-helper.h
