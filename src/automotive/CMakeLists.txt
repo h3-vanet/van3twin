@@ -1,9 +1,12 @@
 find_package(OpenSSL REQUIRED)
 include_directories(${OPENSSL_INCLUDE_DIR})
 link_libraries(${OPENSSL_LIBRARIES})
-find_package(OpenCV REQUIRED)
-include_directories(${OpenCV_INCLUDE_DIRS})
-link_libraries(${OpenCV_LIBS})
+find_package(OpenCV)
+if(OpenCV_FOUND)
+  include_directories(${OpenCV_INCLUDE_DIRS})
+  link_libraries(${OpenCV_LIBS})
+  add_compile_definitions(HAVE_OPENCV)
+endif()
 
 Set(source_files
         model/Foresee/trajectoryPrediction.cc
@@ -23,10 +26,11 @@ Set(source_files
         helper/trafficManagerClientLTE-helper.cc
         helper/trafficManagerServerLTE-helper.cc
 
-        helper/cooperativePerception-helper.cc
-        model/Applications/cooperativePerception.cc
-        model/Facilities/vdpopencda.cc
-        model/utilities/opencda-sensor.cc
+        # OpenCDA/CARLA source files - compiled only when the carla module is present
+        # helper/cooperativePerception-helper.cc
+        # model/Applications/cooperativePerception.cc
+        # model/Facilities/vdpopencda.cc
+        # model/utilities/opencda-sensor.cc
 
         model/Applications/areaSpeedAdvisorClient80211p.cc
         model/Applications/areaSpeedAdvisorServer80211p.cc
@@ -1574,11 +1578,13 @@ set(header_files
         helper/v2xEmulator-helper.h
         helper/simpleCAMSender-helper.h
         helper/simpleVAMSender-helper.h
+        model/utilities/OpenCDAClient.h
 
-        helper/cooperativePerception-helper.h
-        model/utilities/opencda-sensor.h
-        model/Applications/cooperativePerception.h
-        model/Facilities/vdpopencda.h
+        # OpenCDA/CARLA headers - installed only when the carla module is present
+        # helper/cooperativePerception-helper.h
+        # model/utilities/opencda-sensor.h
+        # model/Applications/cooperativePerception.h
+        # model/Facilities/vdpopencda.h
 
 
         model/Applications/areaSpeedAdvisorClient80211p.h
