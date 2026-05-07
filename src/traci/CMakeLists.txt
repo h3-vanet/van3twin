@@ -11,7 +11,8 @@ set(header_files
     model/sumo-socket.h
     model/sumo-storage.h
     model/sumo-TraCIConstants.h
-    model/sumo-TraCIDefs.h)
+    model/sumo-TraCIDefs.h
+    model/sionna-connection-handler.h)
 
 set(test_sources
 )
