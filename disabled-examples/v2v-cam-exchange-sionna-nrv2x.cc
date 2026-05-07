@@ -46,7 +46,9 @@
 #include "ns3/sumo_xml_parser.h"
 #include "ns3/vehicle-visualizer-module.h"
 #include "ns3/MetricSupervisor.h"
+#ifdef NS3_SIONNA
 #include "ns3/sionna-helper.h"
+#endif
 #include <unistd.h>
 #include "ns3/core-module.h"
 

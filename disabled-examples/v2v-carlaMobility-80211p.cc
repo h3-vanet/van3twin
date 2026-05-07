@@ -29,7 +29,9 @@
 #include "ns3/vehicle-visualizer-module.h"
 #include "ns3/MetricSupervisor.h"
 #include <unistd.h>
+#ifdef NS3_SIONNA
 #include "ns3/sionna-helper.h"
+#endif
 
 using namespace ns3;
 

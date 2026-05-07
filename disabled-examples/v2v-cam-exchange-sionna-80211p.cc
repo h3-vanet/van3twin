@@ -42,7 +42,9 @@
 #include "ns3/packet-socket-helper.h"
 #include "ns3/gn-utils.h"
 #include <fstream>
+#ifdef NS3_SIONNA
 #include "ns3/sionna-helper.h"
+#endif
 #include <chrono>
 
 using namespace ns3;

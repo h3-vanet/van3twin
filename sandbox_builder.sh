@@ -1,5 +1,7 @@
 #!/bin/bash
-
+ENABLE_SIONNA=0
+ENABLE_CARLA=0
+ENABLE_GRPC=0
 NS3_VERSION=3.35
 
 if [ $# -ne 0 -a $# -ne 1 ]; then
@@ -38,35 +40,38 @@ if [ ! -z $1 ]; then
 		python3 -m pip install --user grpcio-tools
 		python3 -m pip install --user conan==1.54.0	
 
-		# echo "Installing gRPC from source..."
-		# git clone -b v1.60.0 https://github.com/grpc/grpc
-		# cd grpc
- 		# git submodule update --init
+		if [ "$ENABLE_GRPC" = "1" ]; then
+			echo "Installing gRPC from source..."
+			git clone -b v1.60.0 https://github.com/grpc/grpc
+			cd grpc
+			git submodule update --init
 
-		# mkdir -p cmake/build
-		# cd cmake/build
-		# cmake ../..
-		# make -j$(nproc)
-		# sudo make install
-		# cd ../../..
-
-		# echo "Installing OpenCV..."
-		# git clone https://github.com/opencv/opencv.git
-	    # git clone https://github.com/opencv/opencv_contrib.git
-	    # cd opencv
-	    # mkdir build
-	    # cd build
-	    # cmake -D CMAKE_BUILD_TYPE=Release \
-	    #       -D CMAKE_INSTALL_PREFIX=/usr/local \
-	    #       -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
-	    #       -D WITH_TBB=ON \
-	    #       -D WITH_V4L=ON \
-	    #       -D WITH_QT=OFF \
-	    #       -D WITH_OPENGL=ON ..
-	    # make -j$(nproc)
-	    # sudo make install
-	    # ldconfig
-	    # cd ../..
+			mkdir -p cmake/build
+			cd cmake/build
+			cmake ../..
+			make -j$(nproc)
+			sudo make install
+			cd ../../..
+		fi
+		if [ "$ENABLE_CARLA" = "1" ]; then
+			echo "Installing OpenCV..."
+			git clone https://github.com/opencv/opencv.git
+			git clone https://github.com/opencv/opencv_contrib.git
+			cd opencv
+			mkdir build
+			cd build
+			cmake -D CMAKE_BUILD_TYPE=Release \
+				-D CMAKE_INSTALL_PREFIX=/usr/local \
+				-D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
+				-D WITH_TBB=ON \
+				-D WITH_V4L=ON \
+				-D WITH_QT=OFF \
+				-D WITH_OPENGL=ON ..
+			make -j$(nproc)
+			sudo make install
+			ldconfig
+			cd ../..
+		fi
 
 		# Detecting the current Ubuntu version to install the correct version of libgsl
 		# This is done only on Ubuntu (i.e. only if the command "lsb_release" returns "Ubuntu" as distro)
@@ -161,19 +166,19 @@ cd ns-3-dev
 cp src/automotive/propagation-extended/cni-urbanmicrocell-propagation-loss-model.cc src/propagation/model/
 cp src/automotive/propagation-extended/cni-urbanmicrocell-propagation-loss-model.h src/propagation/model/
 cp src/automotive/propagation-extended/CMakeLists.txt src/propagation/
-
-echo "Copying propagation files for NVIDIA Sionna..."
-sleep 1
-cp src/sionna/files/propagation/CMakeLists.txt src/propagation/
-cp src/sionna/files/propagation/propagation-delay-model.cc src/propagation/model/
-cp src/sionna/files/propagation/propagation-delay-model.h src/propagation/model/
-cp src/sionna/files/propagation/propagation-loss-model.cc src/propagation/model/
-cp src/sionna/files/propagation/propagation-loss-model.h src/propagation/model/
-cp src/sionna/files/propagation/three-gpp-propagation-loss-model.h src/propagation/model
-cp src/sionna/files/propagation/three-gpp-propagation-loss-model.cc src/propagation/model
-cp src/sionna/files/spectrum/CMakeLists.txt src/spectrum/
-cp src/sionna/files/spectrum/three-gpp-spectrum-propagation-loss-model.cc src/spectrum/model
-
+if [ "$ENABLE_SIONNA" = "1" ]; then
+	echo "Copying propagation files for NVIDIA Sionna..."
+	sleep 1
+	cp src/sionna/files/propagation/CMakeLists.txt src/propagation/
+	cp src/sionna/files/propagation/propagation-delay-model.cc src/propagation/model/
+	cp src/sionna/files/propagation/propagation-delay-model.h src/propagation/model/
+	cp src/sionna/files/propagation/propagation-loss-model.cc src/propagation/model/
+	cp src/sionna/files/propagation/propagation-loss-model.h src/propagation/model/
+	cp src/sionna/files/propagation/three-gpp-propagation-loss-model.h src/propagation/model
+	cp src/sionna/files/propagation/three-gpp-propagation-loss-model.cc src/propagation/model
+	cp src/sionna/files/spectrum/CMakeLists.txt src/spectrum/
+	cp src/sionna/files/spectrum/three-gpp-spectrum-propagation-loss-model.cc src/spectrum/model
+fi
 cp src/automotive/model/TxTracker/channel_files/modified/yans-wifi-phy.h src/wifi/model
 
 echo "Extending Signal Info features..."

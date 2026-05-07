@@ -41,7 +41,9 @@
 #include <iomanip>
 #include "ns3/vehicle-visualizer-module.h"
 #include "ns3/MetricSupervisor.h"
+#ifdef NS3_SIONNA
 #include "ns3/sionna-helper.h"
+#endif
 #include "ns3/cv2x_lte-v2x-helper.h"
 #include "ns3/cv2x-module.h"
 #include <ns3/node-list.h>

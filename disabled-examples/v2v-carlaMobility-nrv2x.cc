@@ -37,7 +37,9 @@
 
 #include <unistd.h>
 #include "ns3/core-module.h"
+#ifdef NS3_SIONNA
 #include "ns3/sionna-helper.h"
+#endif
 
 
 using namespace ns3;

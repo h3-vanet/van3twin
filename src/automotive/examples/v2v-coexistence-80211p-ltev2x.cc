@@ -62,7 +62,9 @@
 
 #include "ns3/txTracker.h"
 
+#ifdef NS3_SIONNA
 #include "ns3/sionna-helper.h"
+#endif
 
 #include <chrono>
 
