@@ -13,7 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         cmake \
         ninja-build \
         git \
-        ca-certificates \
         ccache \
         python3 \
         pkg-config \
@@ -113,8 +112,7 @@ RUN cp src/automotive/model/SignalInfo/LTE/lte-spectrum-phy.cc src/lte/model/ \
 RUN ./ns3 configure \
         --build-profile=optimized \
         --disable-tests \
-        --disable-python \
-        --disable-examples
+        --disable-python
 
 RUN ./ns3 build -j"$(nproc)"
 
