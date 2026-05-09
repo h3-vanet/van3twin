@@ -133,6 +133,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # and any hardcoded RPATH entries remain valid.
 COPY --from=builder /build/ns-3-dev/build /build/ns-3-dev/build
 
+# SUMO scenario data files (XML route/network/config files).
+# ns-3 examples reference these with relative paths from /build/ns-3-dev,
+# e.g. "src/automotive/examples/sumo_files_v2v_map/cars_7.rou.xml".
+COPY --from=builder /build/ns-3-dev/src/automotive/examples /build/ns-3-dev/src/automotive/examples
+
 # ns3 wrapper: replaces the original ./ns3 script for 'run' commands,
 # executing pre-built binaries directly without cmake configure/build.
 # The original script is kept as ns3.orig for other subcommands.
