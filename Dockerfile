@@ -42,7 +42,6 @@ ARG VAN3TWIN_REF=master
 RUN git clone --depth=1 -b ${VAN3TWIN_REF} \
         https://github.com/h3-vanet/VaN3Twin.git /van3twin \
     && cp -rf /van3twin/src/. /build/ns-3-dev/src/ \
-    && cp /van3twin/docker/ns3-wrapper /ns3-wrapper \
     && rm -rf /van3twin
 
 WORKDIR /build/ns-3-dev
@@ -99,9 +98,6 @@ RUN cp src/automotive/model/SignalInfo/LTE/lte-spectrum-phy.cc src/lte/model/ \
     && cp src/automotive/model/SignalInfo/LTE/lte-ue-phy.h     src/lte/model/ \
     && cp src/automotive/model/SignalInfo/LTE/CMakeLists.txt   src/lte/
 
-# Fix ns3 script bug: args.run_verbose was renamed to args.orig_verbose
-RUN sed -i 's/args\.run_verbose/args.orig_verbose/g' ns3
-
 # ── Configure & build ─────────────────────────────────────────────────────────
 RUN ./ns3 configure \
         --build-profile=optimized \
@@ -115,13 +111,23 @@ RUN ./ns3 build -j"$(nproc)"
 RUN find build -type f \( -name "*.so" -o -executable \) ! -name "*.py" \
         -exec strip --strip-unneeded {} \; 2>/dev/null || true
 
+# Pack the cmake source structure needed by "./ns3 run" at runtime.
+# "./ns3 run" always calls "cmake --build cmake-cache" which checks whether
+# CMakeLists.txt files changed; without them cmake aborts.
+# We tar only cmake files (no .cc/.h) to keep the runtime image small.
+RUN cd /build/ns-3-dev && \
+    find . \( -name "CMakeLists.txt" -o -name "*.cmake" \) \
+        -not -path "*/cmake-cache/*" \
+    | tar cf /cmake-source.tar -T - && \
+    tar rf /cmake-source.tar VERSION build-support
+
 # ── Runtime ───────────────────────────────────────────────────────────────────
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Runtime libs only — no compiler needed because ./ns3 run is wrapped to
-# execute pre-built binaries directly without invoking cmake.
+# Runtime libs + cmake/ninja/gcc/g++ so that "./ns3 run" can invoke cmake
+# --build without recompiling (binaries already exist, ninja is a no-op).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgsl27 \
         libgslcblas0 \
@@ -129,27 +135,38 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libsqlite3-0 \
         libxml2 \
         python3 \
+        cmake \
+        ninja-build \
+        gcc \
+        g++ \
         sumo \
     && rm -rf /var/lib/apt/lists/*
 
 # Compiled artifacts at the same path used during build so LD_LIBRARY_PATH
 # and any hardcoded RPATH entries remain valid.
-COPY --from=builder /build/ns-3-dev/build /build/ns-3-dev/build
+COPY --from=builder /build/ns-3-dev/build        /build/ns-3-dev/build
+COPY --from=builder /build/ns-3-dev/cmake-cache  /build/ns-3-dev/cmake-cache
 
-# SUMO scenario data files (XML route/network/config files).
-# ns-3 examples reference these with relative paths from /build/ns-3-dev,
-# e.g. "src/automotive/examples/sumo_files_v2v_map/cars_7.rou.xml".
-COPY --from=builder /build/ns-3-dev/src/automotive/examples /build/ns-3-dev/src/automotive/examples
-
-# The lock file maps short scenario names to full binary paths.
-# With --no-build the original ns3 script reads only this file — no cmake.
+# The lock file is what tells ./ns3 run that a build already exists and where
+# to find the binaries. Without it, ns3 refuses to run and asks to configure.
 COPY --from=builder /build/ns-3-dev/.lock-ns3_linux_build /build/ns-3-dev/.lock-ns3_linux_build
 
-# Wrapper: injects --no-build into "run" so the original ns3 script skips
-# cmake entirely.  All other subcommands and flags pass through unchanged.
-COPY --from=builder /build/ns-3-dev/ns3  /build/ns-3-dev/ns3.orig
-COPY --from=builder /ns3-wrapper          /build/ns-3-dev/ns3
-RUN chmod +x /build/ns-3-dev/ns3
+# SUMO scenario data files referenced with relative paths from /build/ns-3-dev.
+COPY --from=builder /build/ns-3-dev/src/automotive/examples /build/ns-3-dev/src/automotive/examples
+
+# ns3 Python script.
+COPY --from=builder /build/ns-3-dev/ns3 /build/ns-3-dev/ns3
+
+# cmake source files (CMakeLists.txt / *.cmake / VERSION / build-support/).
+# Timestamps are set to a fixed past date so cmake --build never sees them
+# as newer than the cmake-cache and skips reconfiguration entirely.
+COPY --from=builder /cmake-source.tar /
+RUN tar xf /cmake-source.tar -C /build/ns-3-dev && rm /cmake-source.tar \
+    && find /build/ns-3-dev \( -name "CMakeLists.txt" -o -name "*.cmake" -o -name "VERSION" \) \
+        -not -path "*/cmake-cache/*" -exec touch -t 200001010000 {} +
+
+# FindBoost.cmake reads boost/version.hpp to detect the version.
+COPY --from=builder /usr/include/boost/version.hpp /usr/include/boost/version.hpp
 
 WORKDIR /build/ns-3-dev
 
