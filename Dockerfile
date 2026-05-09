@@ -88,7 +88,8 @@ RUN ./ns3 configure \
         --build-profile=optimized \
         --disable-tests \
         --disable-python \
-        --enable-examples
+        --enable-examples \
+        --disable-modules=wimax,mesh,dsr,dsdv,uan,lr-wpan,brite,click,openflow
 
 RUN ./ns3 build -j"$(nproc)"
 
