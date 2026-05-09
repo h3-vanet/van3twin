@@ -166,6 +166,10 @@ COPY --from=builder /build/ns-3-dev/ns3          /build/ns-3-dev/ns3
 # files needed for the reconfigure step that "./ns3 run" always performs.
 COPY --from=builder /cmake-source.tar /
 RUN tar xf /cmake-source.tar -C /build/ns-3-dev && rm /cmake-source.tar
+# FindBoost.cmake reads boost/version.hpp to detect the version; without it
+# cmake emits CMake Error and marks configure as failed.  Copy just this one
+# header from the builder rather than installing the full libboost-dev package.
+COPY --from=builder /usr/include/boost/version.hpp /usr/include/boost/version.hpp
 
 WORKDIR /build/ns-3-dev
 
