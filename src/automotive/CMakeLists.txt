@@ -9,7 +9,6 @@ if(OpenCV_FOUND)
 endif()
 
 Set(source_files
-        model/Foresee/trajectoryPrediction.cc
         model/LOS-NLOS/los_nlos.cc
         helper/areaSpeedAdvisorClient80211p-helper.cc
         helper/areaSpeedAdvisorServer80211p-helper.cc
@@ -70,7 +69,6 @@ Set(source_files
         model/Facilities/VRUdp.cc
         model/Facilities/VRUBasicService.cc
         model/Facilities/mcBasicService.cc
-        model/Foresee/foresee.cc
 
         model/BTP/btp.cc
         model/BTP/btpHeader.cc
@@ -1561,7 +1559,6 @@ Set(source_files
 )
 
 set(header_files
-        model/Foresee/trajectoryPrediction.h
         model/LOS-NLOS/los_nlos.h
         model/Measurements/MetricSupervisor.h
         helper/areaSpeedAdvisorClientLTE-helper.h
@@ -1604,7 +1601,6 @@ set(header_files
         model/Applications/v2xEmulator.h
         model/utilities/csv-utils.h
         model/Facilities/mcBasicService.h
-        model/Foresee/foresee.h
 
         model/Facilities/signalInfoUtils.h
         model/Security/security.h

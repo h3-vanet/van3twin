@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libssl-dev \
         libboost-dev \
         sumo \
+        nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Clone upstream ns-3 ───────────────────────────────────────────────────────
