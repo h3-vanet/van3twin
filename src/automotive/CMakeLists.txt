@@ -36,8 +36,6 @@ Set(source_files
         model/Applications/areaSpeedAdvisorServer80211p.cc
         model/Applications/areaSpeedAdvisorClientLTE.cc
         model/Applications/areaSpeedAdvisorServerLTE.cc
-        model/Applications/simpleCAMSender-gps-tc.cc
-        model/Applications/simpleVAMSender-gps-tc.cc
         model/Applications/trafficManagerClient80211p.cc
         model/Applications/trafficManagerServer80211p.cc
         model/Applications/trafficManagerClientLTE.cc
@@ -1593,8 +1591,7 @@ set(header_files
         model/Applications/areaSpeedAdvisorClientLTE.h
         model/Applications/areaSpeedAdvisorServerLTE.h
         model/Applications/emergencyVehicleAlert.h
-        model/Applications/simpleCAMSender-gps-tc.h
-        model/Applications/simpleVAMSender-gps-tc.h
+
 
         model/Facilities/denBasicService.h
         model/Facilities/denData.h
@@ -5869,20 +5866,16 @@ build_lib(
         LIBRARIES_TO_LINK
         ${OPENSSL_LIBRARIES}
         ${libcore}
-        ${libfd-net-device}
         ${libwifi}
         ${libapplications}
         ${libmobility}
         ${libconfig-store}
         ${libstats}
-        ${libgps-tc}
         ${libnr}
         ${libcv2x}
         ${libwave}
         ${libinternet}
         ${libvehicle-visualizer}
         ${libtraci}
-        ${libcarla}
-        ${libsionna}
         TEST_SOURCES ${test_sources}
 )
