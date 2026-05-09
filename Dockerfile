@@ -122,6 +122,17 @@ RUN ./ns3 build -j"$(nproc)"
 RUN find build -type f \( -name "*.so" -o -executable \) ! -name "*.py" \
         -exec strip --strip-unneeded {} \; 2>/dev/null || true
 
+# Pack the cmake source structure needed by "./ns3 run" at runtime.
+# "./ns3 run" always calls "cmake -S . -B cmake-cache" before running, which
+# requires VERSION, build-support/ and all CMakeLists.txt / *.cmake files.
+# We tar only those files (no .cc/.h) to keep the runtime image small.
+RUN find /build/ns-3-dev \
+        \( -name "CMakeLists.txt" -o -name "*.cmake" \) \
+        -not -path "*/cmake-cache/*" \
+    | tar cf /cmake-source.tar -T - \
+    && tar rf /cmake-source.tar \
+        -C /build/ns-3-dev VERSION build-support
+
 # ── Runtime ───────────────────────────────────────────────────────────────────
 FROM ubuntu:22.04
 
@@ -129,6 +140,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Runtime libs + cmake/ninja so that "./ns3 run" can locate the build
 # and execute pre-built scenarios without recompiling.
+# gcc/g++ are required because cmake runs compiler feature tests during the
+# reconfigure that "./ns3 run" always triggers before executing a scenario.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgsl27 \
         libgslcblas0 \
@@ -143,16 +156,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         sumo \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy compiled artifacts AND the cmake cache so "./ns3 run" can find
-# Keep the same path as the build stage so all hardcoded paths inside
-# CMakeCache.txt remain valid without any sed fixup.
+# Compiled artifacts: keep the same /build/ns-3-dev path as the builder so
+# all hardcoded paths inside CMakeCache.txt remain valid.
 COPY --from=builder /build/ns-3-dev/build        /build/ns-3-dev/build
 COPY --from=builder /build/ns-3-dev/cmake-cache  /build/ns-3-dev/cmake-cache
 COPY --from=builder /build/ns-3-dev/ns3          /build/ns-3-dev/ns3
-# cmake --build checks that CMakeLists.txt exists in CMAKE_HOME_DIRECTORY
-# (stored in CMakeCache.txt) before handing off to ninja; copy it to satisfy
-# that sanity check without bringing in the full source tree.
-COPY --from=builder /build/ns-3-dev/CMakeLists.txt /build/ns-3-dev/CMakeLists.txt
+# cmake source structure: VERSION + build-support/ + all CMakeLists.txt/.cmake
+# files needed for the reconfigure step that "./ns3 run" always performs.
+COPY --from=builder /cmake-source.tar /
+RUN tar xf /cmake-source.tar -C /build/ns-3-dev && rm /cmake-source.tar
 
 WORKDIR /build/ns-3-dev
 
