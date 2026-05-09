@@ -1,10 +1,9 @@
 #!/bin/bash
-# Intercepts "./ns3 run <scenario> [args]" and executes the pre-built binary
-# directly.  All other subcommands (configure, build, …) go to ns3.orig.
+# Adds --no-build to "run" so the original ns3 script skips cmake entirely
+# and resolves the binary from .lock-ns3_linux_build.  All other subcommands
+# and flags (--gdb, --valgrind, --cwd, --command-template, …) pass through
+# to ns3.orig unchanged.
 if [ "${1:-}" = "run" ]; then
-    FULL="${2:-}"; SCENARIO="${FULL%% *}"; EXTRA="${FULL#"$SCENARIO"}"
-    BIN=$(find /build/ns-3-dev/build -name "*-${SCENARIO}-*" -type f -executable 2>/dev/null | head -1)
-    [ -z "$BIN" ] && { echo "scenario not found: $SCENARIO" >&2; exit 1; }
-    exec "$BIN" $EXTRA "${@:3}"
+    exec /build/ns-3-dev/ns3.orig run --no-build "${@:2}"
 fi
 exec /build/ns-3-dev/ns3.orig "$@"

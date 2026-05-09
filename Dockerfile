@@ -138,9 +138,12 @@ COPY --from=builder /build/ns-3-dev/build /build/ns-3-dev/build
 # e.g. "src/automotive/examples/sumo_files_v2v_map/cars_7.rou.xml".
 COPY --from=builder /build/ns-3-dev/src/automotive/examples /build/ns-3-dev/src/automotive/examples
 
-# ns3 wrapper: replaces the original ./ns3 script for 'run' commands,
-# executing pre-built binaries directly without cmake configure/build.
-# The original script is kept as ns3.orig for other subcommands.
+# The lock file maps short scenario names to full binary paths.
+# With --no-build the original ns3 script reads only this file — no cmake.
+COPY --from=builder /build/ns-3-dev/.lock-ns3_linux_build /build/ns-3-dev/.lock-ns3_linux_build
+
+# Wrapper: injects --no-build into "run" so the original ns3 script skips
+# cmake entirely.  All other subcommands and flags pass through unchanged.
 COPY --from=builder /build/ns-3-dev/ns3  /build/ns-3-dev/ns3.orig
 COPY --from=builder /ns3-wrapper          /build/ns-3-dev/ns3
 RUN chmod +x /build/ns-3-dev/ns3
