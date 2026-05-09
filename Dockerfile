@@ -42,6 +42,8 @@ ARG VAN3TWIN_REF=master
 RUN git clone --depth=1 -b ${VAN3TWIN_REF} \
         https://github.com/h3-vanet/VaN3Twin.git /van3twin \
     && cp -rf /van3twin/src/. /build/ns-3-dev/src/ \
+    && grep -rl '"SumoGUI", BooleanValue (true)' /build/ns-3-dev/src/automotive/examples/ \
+       | xargs sed -i 's/"SumoGUI", BooleanValue (true)/"SumoGUI", BooleanValue (false)/g' \
     && rm -rf /van3twin
 
 WORKDIR /build/ns-3-dev
@@ -140,7 +142,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc \
         g++ \
         sumo \
-        xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 # Compiled artifacts at the same path used during build so LD_LIBRARY_PATH
