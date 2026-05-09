@@ -140,6 +140,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc \
         g++ \
         sumo \
+        xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 # Compiled artifacts at the same path used during build so LD_LIBRARY_PATH
