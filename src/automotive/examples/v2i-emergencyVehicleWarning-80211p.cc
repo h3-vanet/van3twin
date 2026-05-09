@@ -65,7 +65,7 @@ main (int argc, char *argv[])
   std::string sumo_netstate_file_name;
   bool verbose = true;
   bool realtime = false;
-  bool sumo_gui = true;
+  bool sumo_gui = false;
   double sumo_updates = 0.01;
   int txPower=26; //be aware of tx Power
   float datarate=12;  

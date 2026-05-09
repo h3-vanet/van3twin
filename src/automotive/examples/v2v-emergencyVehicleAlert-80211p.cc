@@ -59,7 +59,7 @@ main (int argc, char *argv[])
 
   bool verbose = true;
   bool realtime = false;
-  bool sumo_gui = true;
+  bool sumo_gui = false;
   double sumo_updates = 0.01;
   std::string csv_name;
   std::string csv_name_cumulative;
