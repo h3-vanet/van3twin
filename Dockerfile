@@ -127,6 +127,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Runtime libs + cmake/ninja so that "./ns3 run" can locate the build
 # and execute pre-built scenarios without recompiling.
+# gcc/g++ are required because "./ns3 run" always triggers a cmake reconfigure
+# which runs compiler feature tests even when binaries are already built.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgsl27 \
         libgslcblas0 \
@@ -136,6 +138,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         cmake \
         ninja-build \
+        gcc \
+        g++ \
         sumo \
     && rm -rf /var/lib/apt/lists/*
 
