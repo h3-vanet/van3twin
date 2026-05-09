@@ -17,8 +17,6 @@ Set(source_files
         helper/areaSpeedAdvisorServerLTE-helper.cc
         helper/emergencyVehicleAlert-helper.cc
         helper/v2xEmulator-helper.cc
-        helper/simpleCAMSender-helper.cc
-        helper/simpleVAMSender-helper.cc
         helper/emergencyVehicleWarningServer80211p-helper.cc
         helper/emergencyVehicleWarningClient80211p-helper.cc
         helper/trafficManagerClient80211p-helper.cc
@@ -50,8 +48,6 @@ Set(source_files
         model/Facilities/ITSSReceivingTableEntry.cc
         model/Facilities/asn_utils.cc
         model/Facilities/vdpTraci.cc
-        model/Facilities/vdpGPSTraceClient.cc
-        model/Facilities/vrudpGPSTraceClient.cc
         model/Facilities/caBasicService.cc
         model/utilities/sumo_xml_parser.cc
         model/Applications/v2xEmulator.cc
@@ -1574,8 +1570,6 @@ set(header_files
         helper/areaSpeedAdvisorServer80211p-helper.h
         helper/emergencyVehicleAlert-helper.h
         helper/v2xEmulator-helper.h
-        helper/simpleCAMSender-helper.h
-        helper/simpleVAMSender-helper.h
         model/utilities/OpenCDAClient.h
         model/utilities/carla-module.h
 
@@ -1599,8 +1593,6 @@ set(header_files
         model/Facilities/ITSSOriginatingTableEntry.h
         model/Facilities/ITSSReceivingTableEntry.h
         model/Facilities/vdpTraci.h
-        model/Facilities/vdpGPSTraceClient.h
-        model/Facilities/vrudpGPSTraceClient.h
         model/Facilities/vdp.h
         model/Facilities/caBasicService.h
         model/utilities/sumo_xml_parser.h
