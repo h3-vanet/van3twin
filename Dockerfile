@@ -126,12 +126,13 @@ RUN find build -type f \( -name "*.so" -o -executable \) ! -name "*.py" \
 # "./ns3 run" always calls "cmake -S . -B cmake-cache" before running, which
 # requires VERSION, build-support/ and all CMakeLists.txt / *.cmake files.
 # We tar only those files (no .cc/.h) to keep the runtime image small.
-RUN find /build/ns-3-dev \
-        \( -name "CMakeLists.txt" -o -name "*.cmake" \) \
+# IMPORTANT: run find from inside the source dir so paths in the archive are
+# relative (e.g. "./CMakeLists.txt"), allowing correct extraction with -C later.
+RUN cd /build/ns-3-dev && \
+    find . \( -name "CMakeLists.txt" -o -name "*.cmake" \) \
         -not -path "*/cmake-cache/*" \
-    | tar cf /cmake-source.tar -T - \
-    && tar rf /cmake-source.tar \
-        -C /build/ns-3-dev VERSION build-support
+    | tar cf /cmake-source.tar -T - && \
+    tar rf /cmake-source.tar VERSION build-support
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
 FROM ubuntu:22.04
