@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ccache \
         python3 \
         pkg-config \
+        ca-certificates \
         libgsl-dev \
         libgslcblas0 \
         libsqlite3-dev \
@@ -45,7 +46,7 @@ RUN git clone --depth=1 -b nr-v2x-dev \
 # branch or tag (e.g. --build-arg VAN3TWIN_REF=my-branch).
 # Default to the fix branch until this PR is merged into master.
 # After merge, change back to: ARG VAN3TWIN_REF=master
-ARG VAN3TWIN_REF=claude/docker-build-fix
+ARG VAN3TWIN_REF=master
 RUN git clone --depth=1 -b ${VAN3TWIN_REF} \
         https://github.com/h3-vanet/VaN3Twin.git /van3twin \
     && cp -rf /van3twin/src/. /build/ns-3-dev/src/ \
@@ -112,7 +113,8 @@ RUN cp src/automotive/model/SignalInfo/LTE/lte-spectrum-phy.cc src/lte/model/ \
 RUN ./ns3 configure \
         --build-profile=optimized \
         --disable-tests \
-        --disable-python
+        --disable-python \
+        --enable-examples
 
 RUN ./ns3 build -j"$(nproc)"
 
@@ -127,8 +129,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Runtime libs + cmake/ninja so that "./ns3 run" can locate the build
 # and execute pre-built scenarios without recompiling.
-# gcc/g++ are required because "./ns3 run" always triggers a cmake reconfigure
-# which runs compiler feature tests even when binaries are already built.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgsl27 \
         libgslcblas0 \
