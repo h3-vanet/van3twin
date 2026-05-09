@@ -8,7 +8,6 @@
 #include "ns3/traci-client.h"
 #include "ns3/event-id.h"
 #include "ns3/wifi-phy-state.h"
-#include "ns3/gps-tc-module.h"
 
 namespace ns3 {
 
@@ -83,11 +82,6 @@ public:
    */
   void setTraCIClient(Ptr<TraciClient> traci_ptr) {m_traci_ptr = traci_ptr;}
 
-  /**
-   * @brief Set the Gps TC client pointer.
-   * @param gps_tc
-   */
-  void setGPSTCClient(std::vector<GPSTraceClient *> v_gps_tc) {m_v_gpstc = v_gps_tc;}
 
   /**
    * @brief Set the OpenCDA client pointer.
@@ -548,7 +542,6 @@ private:
   
   Ptr<TraciClient> m_traci_ptr = nullptr;
   Ptr<OpenCDAClient> m_carla_ptr = nullptr;
-  std::vector<GPSTraceClient *> m_v_gpstc;
   double m_baseline_m = 150.0;
 
   bool m_prr_verbose_stdout = false;
