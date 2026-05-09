@@ -38,7 +38,7 @@ RUN git clone --depth=1 -b nr-v2x-dev \
     || true
 
 # ── Merge VaN3Twin custom modules ─────────────────────────────────────────────
-ARG VAN3TWIN_REF=master
+ARG VAN3TWIN_REF=claude/docker-build-fix
 RUN git clone --depth=1 -b ${VAN3TWIN_REF} \
         https://github.com/h3-vanet/VaN3Twin.git /van3twin \
     && cp -rf /van3twin/src/. /build/ns-3-dev/src/ \
