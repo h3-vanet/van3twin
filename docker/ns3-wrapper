@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""
+VaN3Twin runtime wrapper for the ns3 script.
+
+For 'run' commands: locates and executes the pre-built binary directly,
+bypassing cmake configure/build entirely (which would fail in the runtime
+image because the C++ source files are not present).
+
+For all other commands (configure, build, show-targets, …): delegates to
+the original ns3 Python script (ns3.orig in the same directory).
+"""
+import sys
+import os
+import glob
+
+
+def find_binary(scenario: str, build_dir: str) -> str | None:
+    pattern = os.path.join(build_dir, '**', f'*-{scenario}-*')
+    candidates = [
+        p for p in glob.glob(pattern, recursive=True)
+        if os.path.isfile(p) and os.access(p, os.X_OK)
+    ]
+    return candidates[0] if candidates else None
+
+
+def list_scenarios(build_dir: str) -> list[str]:
+    pattern = os.path.join(build_dir, '**', 'ns3.*')
+    names = set()
+    for p in glob.glob(pattern, recursive=True):
+        if not (os.path.isfile(p) and os.access(p, os.X_OK)):
+            continue
+        base = os.path.basename(p)
+        # ns3.<ver>-<scenario-name>-<profile>  →  extract <scenario-name>
+        parts = base.split('-', 1)
+        if len(parts) == 2:
+            inner = parts[1].rsplit('-', 1)
+            if len(inner) == 2:
+                names.add(inner[0])
+    return sorted(names)
+
+
+def run_scenario(run_args: list[str]) -> None:
+    if not run_args:
+        print("Usage: ./ns3 run <scenario> [--arg=val ...]", file=sys.stderr)
+        sys.exit(1)
+
+    # ns3 run accepts both:
+    #   ./ns3 run "scenario --flag"   (single quoted string)
+    #   ./ns3 run scenario --flag     (separate arguments)
+    parts = run_args[0].split()
+    scenario = parts[0]
+    extra = parts[1:] + run_args[1:]
+
+    build_dir = '/build/ns-3-dev/build'
+    binary = find_binary(scenario, build_dir)
+
+    if binary is None:
+        print(f"Error: scenario '{scenario}' not found in {build_dir}",
+              file=sys.stderr)
+        available = list_scenarios(build_dir)
+        if available:
+            print("Available scenarios:", file=sys.stderr)
+            for name in available:
+                print(f"  {name}", file=sys.stderr)
+        sys.exit(1)
+
+    os.execv(binary, [binary] + extra)
+
+
+def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == 'run':
+        run_scenario(sys.argv[2:])
+    else:
+        # Delegate to the original ns3 script for configure, build, etc.
+        here = os.path.dirname(os.path.abspath(__file__))
+        ns3_orig = os.path.join(here, 'ns3.orig')
+        os.execv(ns3_orig, [ns3_orig] + sys.argv[1:])
+
+
+if __name__ == '__main__':
+    main()
