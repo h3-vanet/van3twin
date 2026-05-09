@@ -162,10 +162,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /build/ns-3-dev/build        /build/ns-3-dev/build
 COPY --from=builder /build/ns-3-dev/cmake-cache  /build/ns-3-dev/cmake-cache
 COPY --from=builder /build/ns-3-dev/ns3          /build/ns-3-dev/ns3
-# cmake source structure: VERSION + build-support/ + all CMakeLists.txt/.cmake
-# files needed for the reconfigure step that "./ns3 run" always performs.
+# cmake source structure (CMakeLists.txt / *.cmake / VERSION / build-support/).
+# cmake --build checks that CMakeLists.txt exists; ninja re-runs cmake configure
+# when any cmake source file is NEWER than cmake-cache.  We timestamp all
+# extracted files to a fixed past date so ninja never sees them as changed.
 COPY --from=builder /cmake-source.tar /
-RUN tar xf /cmake-source.tar -C /build/ns-3-dev && rm /cmake-source.tar
+RUN tar xf /cmake-source.tar -C /build/ns-3-dev && rm /cmake-source.tar \
+    && find /build/ns-3-dev \( -name "CMakeLists.txt" -o -name "*.cmake" -o -name "VERSION" \) \
+        -not -path "*/cmake-cache/*" -exec touch -t 200001010000 {} +
 # FindBoost.cmake reads boost/version.hpp to detect the version; without it
 # cmake emits CMake Error and marks configure as failed.  Copy just this one
 # header from the builder rather than installing the full libboost-dev package.
