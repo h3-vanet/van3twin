@@ -122,6 +122,7 @@ int main (int argc, char *argv[])
   int up=0;
   int interfering_up=0;
   bool verbose = false; // Set to true to get a lot of verbose output from the IEEE 802.11p PHY model (leave this to false)
+  bool sumo_gui = false;
   int numberOfNodes; // Total number of vehicles, automatically filled in by reading the XML file
   double m_baseline_prr = 150.0; // PRR baseline value (default: 150 m)
   int txPower = 23.0; // IEEE 802.11p transmission power in dBm (default: 23 dBm)
@@ -146,6 +147,7 @@ int main (int argc, char *argv[])
   cmd.AddValue ("tx-power", "OBUs transmission power [dBm]", txPower);
   cmd.AddValue ("sim-time", "Total duration of the simulation [s]", simTime);
   cmd.AddValue("enable-security","Enable the transmission of secured V2X packets",security_enabled);
+  cmd.AddValue("sumo-gui", "Use SUMO GUI (requires display)", sumo_gui);
   cmd.Parse (argc, argv);
 
   /* Load the .rou.xml file (SUMO map and scenario) */
@@ -219,7 +221,7 @@ int main (int argc, char *argv[])
   sumoClient->SetAttribute ("SumoBinaryPath", StringValue (""));    // use system installation of sumo
   sumoClient->SetAttribute ("SynchInterval", TimeValue (Seconds (0.01)));
   sumoClient->SetAttribute ("StartTime", TimeValue (Seconds (0.0)));
-  sumoClient->SetAttribute ("SumoGUI", BooleanValue (true));
+  sumoClient->SetAttribute ("SumoGUI", BooleanValue (sumo_gui));
   sumoClient->SetAttribute ("SumoPort", UintegerValue (3400));
   sumoClient->SetAttribute ("PenetrationRate", DoubleValue (1.0));
   sumoClient->SetAttribute ("SumoLogFile", BooleanValue (false));

@@ -52,7 +52,7 @@ main (int argc, char *argv[])
 
   bool verbose = true;
   bool realtime = false;
-  bool sumo_gui = true;
+  bool sumo_gui = false;
   double sumo_updates = 0.01;
   bool print_summary = false;
   int txPower=26;
