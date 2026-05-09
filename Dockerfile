@@ -99,6 +99,9 @@ RUN cp src/automotive/model/SignalInfo/LTE/lte-spectrum-phy.cc src/lte/model/ \
     && cp src/automotive/model/SignalInfo/LTE/lte-ue-phy.h     src/lte/model/ \
     && cp src/automotive/model/SignalInfo/LTE/CMakeLists.txt   src/lte/
 
+# Fix ns3 script bug: args.run_verbose was renamed to args.orig_verbose
+RUN sed -i 's/args\.run_verbose/args.orig_verbose/g' ns3
+
 # ── Configure & build ─────────────────────────────────────────────────────────
 RUN ./ns3 configure \
         --build-profile=optimized \
