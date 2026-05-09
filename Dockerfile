@@ -26,14 +26,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Clone upstream ns-3 ───────────────────────────────────────────────────────
-# sandbox_builder.sh uses the CTTC GitLab fork (not github.com/h3-vanet), so
-# we clone it directly here.  Using --depth=1 on the target branch avoids
-# pulling the full history.
 WORKDIR /build
 RUN git clone --depth=1 -b ns-3-dev-v2x-v0.2 \
         https://gitlab.com/cttc-lena/ns-3-dev.git
 
-# Add the NR V2X module (sandbox_builder.sh lines 118-127)
+# Add the NR V2X module
 RUN git clone --depth=1 -b nr-v2x-dev \
         https://gitlab.com/cttc-lena/nr.git \
         /build/ns-3-dev/src/nr \
@@ -41,27 +38,22 @@ RUN git clone --depth=1 -b nr-v2x-dev \
     || true
 
 # ── Merge VaN3Twin custom modules ─────────────────────────────────────────────
-# Clone VaN3Twin so the Dockerfile is self-contained and works regardless of
-# where "docker build" is invoked.  Override VAN3TWIN_REF to pin a specific
-# branch or tag (e.g. --build-arg VAN3TWIN_REF=my-branch).
-# Default to the fix branch until this PR is merged into master.
-# After merge, change back to: ARG VAN3TWIN_REF=master
 ARG VAN3TWIN_REF=master
 RUN git clone --depth=1 -b ${VAN3TWIN_REF} \
         https://github.com/h3-vanet/VaN3Twin.git /van3twin \
     && cp -rf /van3twin/src/. /build/ns-3-dev/src/ \
+    && cp /van3twin/docker/ns3-wrapper /ns3-wrapper \
     && rm -rf /van3twin
 
 WORKDIR /build/ns-3-dev
 
 # ── Apply patches from sandbox_builder.sh ────────────────────────────────────
 
-# Patch CMakeLists.txt: add C language support alongside C++ (line 152)
+# Patch CMakeLists.txt: add C language support alongside C++
 RUN sed -i -E 's#^([[:blank:]]*)project\(NS3 CXX\)#\1project\(NS3 C CXX\)#' \
         CMakeLists.txt
 
-# Propagation-extended models (lines 166-168, fixing the corrupted path in
-# the original script where a URL was accidentally embedded in the cp target)
+# Propagation-extended models
 RUN cp src/automotive/propagation-extended/cni-urbanmicrocell-propagation-loss-model.cc \
           src/propagation/model/ \
     && cp src/automotive/propagation-extended/cni-urbanmicrocell-propagation-loss-model.h \
@@ -69,11 +61,11 @@ RUN cp src/automotive/propagation-extended/cni-urbanmicrocell-propagation-loss-m
     && cp src/automotive/propagation-extended/CMakeLists.txt \
           src/propagation/
 
-# TxTracker: patched WiFi PHY header (line 182)
+# TxTracker: patched WiFi PHY header
 RUN cp src/automotive/model/TxTracker/channel_files/modified/yans-wifi-phy.h \
           src/wifi/model/
 
-# SignalInfo tags for all four radio stacks (lines 186-225)
+# SignalInfo tags for all four radio stacks
 RUN for tag in rssi-tag sinr-tag rsrp-tag timestamp-tag size-tag; do \
         for stack in wifi/model cv2x/model nr/model lte/model; do \
             cp src/automotive/model/SignalInfo/${tag}.cc src/${stack}/ && \
@@ -81,35 +73,33 @@ RUN for tag in rssi-tag sinr-tag rsrp-tag timestamp-tag size-tag; do \
         done; \
     done
 
-# WiFi SignalInfo overrides (lines 227-231)
+# WiFi SignalInfo overrides
 RUN cp src/automotive/model/SignalInfo/WiFi/wifi-mac-queue-item.h      src/wifi/model/ \
     && cp src/automotive/model/SignalInfo/WiFi/ocb-wifi-mac.cc         src/wave/model/ \
     && cp src/automotive/model/SignalInfo/WiFi/frame-exchange-manager.cc    src/wifi/model/ \
     && cp src/automotive/model/SignalInfo/WiFi/qos-frame-exchange-manager.cc src/wifi/model/ \
     && cp src/automotive/model/SignalInfo/WiFi/CMakeLists.txt          src/wifi/
 
-# CV2X SignalInfo overrides (lines 233-237)
+# CV2X SignalInfo overrides
 RUN cp src/automotive/model/SignalInfo/CV2X/cv2x_lte-spectrum-phy.cc src/cv2x/model/ \
     && cp src/automotive/model/SignalInfo/CV2X/cv2x_lte-spectrum-phy.h  src/cv2x/model/ \
     && cp src/automotive/model/SignalInfo/CV2X/cv2x_lte-ue-mac.h        src/cv2x/model/ \
     && cp src/automotive/model/SignalInfo/CV2X/cv2x_lte-ue-mac.cc       src/cv2x/model/ \
     && cp src/automotive/model/SignalInfo/CV2X/CMakeLists.txt           src/cv2x/
 
-# NR SignalInfo overrides (lines 239-242)
+# NR SignalInfo overrides
 RUN cp src/automotive/model/SignalInfo/NR/nr-spectrum-phy.cc src/nr/model/ \
     && cp src/automotive/model/SignalInfo/NR/nr-spectrum-phy.h  src/nr/model/ \
     && cp src/automotive/model/SignalInfo/NR/nr-ue-phy.cc       src/nr/model/ \
     && cp src/automotive/model/SignalInfo/NR/CMakeLists.txt     src/nr/
 
-# LTE SignalInfo overrides (lines 244-247)
+# LTE SignalInfo overrides
 RUN cp src/automotive/model/SignalInfo/LTE/lte-spectrum-phy.cc src/lte/model/ \
     && cp src/automotive/model/SignalInfo/LTE/lte-ue-phy.cc    src/lte/model/ \
     && cp src/automotive/model/SignalInfo/LTE/lte-ue-phy.h     src/lte/model/ \
     && cp src/automotive/model/SignalInfo/LTE/CMakeLists.txt   src/lte/
 
 # ── Configure & build ─────────────────────────────────────────────────────────
-# --disable-tests and --disable-python trim a large portion of the build.
-# carla/sionna modules are not present in this tree so no need to list them.
 RUN ./ns3 configure \
         --build-profile=optimized \
         --disable-tests \
@@ -122,27 +112,13 @@ RUN ./ns3 build -j"$(nproc)"
 RUN find build -type f \( -name "*.so" -o -executable \) ! -name "*.py" \
         -exec strip --strip-unneeded {} \; 2>/dev/null || true
 
-# Pack the cmake source structure needed by "./ns3 run" at runtime.
-# "./ns3 run" always calls "cmake -S . -B cmake-cache" before running, which
-# requires VERSION, build-support/ and all CMakeLists.txt / *.cmake files.
-# We tar only those files (no .cc/.h) to keep the runtime image small.
-# IMPORTANT: run find from inside the source dir so paths in the archive are
-# relative (e.g. "./CMakeLists.txt"), allowing correct extraction with -C later.
-RUN cd /build/ns-3-dev && \
-    find . \( -name "CMakeLists.txt" -o -name "*.cmake" \) \
-        -not -path "*/cmake-cache/*" \
-    | tar cf /cmake-source.tar -T - && \
-    tar rf /cmake-source.tar VERSION build-support
-
 # ── Runtime ───────────────────────────────────────────────────────────────────
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Runtime libs + cmake/ninja so that "./ns3 run" can locate the build
-# and execute pre-built scenarios without recompiling.
-# gcc/g++ are required because cmake runs compiler feature tests during the
-# reconfigure that "./ns3 run" always triggers before executing a scenario.
+# Runtime libs only — no compiler needed because ./ns3 run is wrapped to
+# execute pre-built binaries directly without invoking cmake.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgsl27 \
         libgslcblas0 \
@@ -150,30 +126,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libsqlite3-0 \
         libxml2 \
         python3 \
-        cmake \
-        ninja-build \
-        gcc \
-        g++ \
         sumo \
     && rm -rf /var/lib/apt/lists/*
 
-# Compiled artifacts: keep the same /build/ns-3-dev path as the builder so
-# all hardcoded paths inside CMakeCache.txt remain valid.
-COPY --from=builder /build/ns-3-dev/build        /build/ns-3-dev/build
-COPY --from=builder /build/ns-3-dev/cmake-cache  /build/ns-3-dev/cmake-cache
-COPY --from=builder /build/ns-3-dev/ns3          /build/ns-3-dev/ns3
-# cmake source structure (CMakeLists.txt / *.cmake / VERSION / build-support/).
-# cmake --build checks that CMakeLists.txt exists; ninja re-runs cmake configure
-# when any cmake source file is NEWER than cmake-cache.  We timestamp all
-# extracted files to a fixed past date so ninja never sees them as changed.
-COPY --from=builder /cmake-source.tar /
-RUN tar xf /cmake-source.tar -C /build/ns-3-dev && rm /cmake-source.tar \
-    && find /build/ns-3-dev \( -name "CMakeLists.txt" -o -name "*.cmake" -o -name "VERSION" \) \
-        -not -path "*/cmake-cache/*" -exec touch -t 200001010000 {} +
-# FindBoost.cmake reads boost/version.hpp to detect the version; without it
-# cmake emits CMake Error and marks configure as failed.  Copy just this one
-# header from the builder rather than installing the full libboost-dev package.
-COPY --from=builder /usr/include/boost/version.hpp /usr/include/boost/version.hpp
+# Compiled artifacts at the same path used during build so LD_LIBRARY_PATH
+# and any hardcoded RPATH entries remain valid.
+COPY --from=builder /build/ns-3-dev/build /build/ns-3-dev/build
+
+# SUMO scenario data files (XML route/network/config files).
+# ns-3 examples reference these with relative paths from /build/ns-3-dev,
+# e.g. "src/automotive/examples/sumo_files_v2v_map/cars_7.rou.xml".
+COPY --from=builder /build/ns-3-dev/src/automotive/examples /build/ns-3-dev/src/automotive/examples
+
+# The lock file maps short scenario names to full binary paths.
+# With --no-build the original ns3 script reads only this file — no cmake.
+COPY --from=builder /build/ns-3-dev/.lock-ns3_linux_build /build/ns-3-dev/.lock-ns3_linux_build
+
+# Wrapper: injects --no-build into "run" so the original ns3 script skips
+# cmake entirely.  All other subcommands and flags pass through unchanged.
+COPY --from=builder /build/ns-3-dev/ns3  /build/ns-3-dev/ns3.orig
+COPY --from=builder /ns3-wrapper          /build/ns-3-dev/ns3
+RUN chmod +x /build/ns-3-dev/ns3
 
 WORKDIR /build/ns-3-dev
 
