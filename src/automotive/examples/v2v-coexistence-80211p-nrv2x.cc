@@ -59,7 +59,7 @@
 
 #include "ns3/txTracker.h"
 
-#ifdef NS3_SIONNA
+#ifdef HAVE_SIONNA
 #include "ns3/sionna-helper.h"
 #endif
 
@@ -161,6 +161,7 @@ void receiveCAM(asn1cpp::Seq<CAM> cam, Address from, StationId_t my_stationID, S
   Vector b_position = {pos_sender.x, pos_sender.y, 0};
   if (use_sionna)
   {
+#ifdef HAVE_SIONNA
     std::string los_str = getLOSStatusFromSionna(a_position, b_position);
     if (los_str == "[False]")
       {
@@ -170,12 +171,15 @@ void receiveCAM(asn1cpp::Seq<CAM> cam, Address from, StationId_t my_stationID, S
       {
         los = 1;
       }
+#else
+    los = 0;
+#endif
   }
   else
   {
     los = 0; // Default, with ns-3 models we should check if the model used provides LOS/NLOS state and its current value
   }
-  
+
   std::ifstream camFileHeader("src/sinr_ni.csv");
   std::ofstream camFile;
   camFile.open("src/sinr_ni.csv", std::ios::out | std::ios::app);
@@ -239,6 +243,7 @@ void receiveCPM(asn1cpp::Seq<CollectivePerceptionMessage> cpm, Address from, Sta
   Vector b_position = {pos_sender.x, pos_sender.y, pos_sender.z};
   if (use_sionna)
   {
+#ifdef HAVE_SIONNA
     std::string los_str = getLOSStatusFromSionna(a_position, b_position);
     if (los_str == "[False]")
       {
@@ -248,6 +253,9 @@ void receiveCPM(asn1cpp::Seq<CollectivePerceptionMessage> cpm, Address from, Sta
       {
         los = 1;
       }
+#else
+    los = 0;
+#endif
   }
   else
   {
@@ -454,6 +462,7 @@ int main (int argc, char *argv[])
   std::cout << "Start running v2v-simple-cam-exchange-80211p-nrv2x simulation" << std::endl;
   
   use_sionna = sionna;
+#ifdef HAVE_SIONNA
   SionnaHelper& sionnaHelper = SionnaHelper::GetInstance();
   if (sionna)
     {
@@ -462,6 +471,7 @@ int main (int argc, char *argv[])
       sionnaHelper.SetLocalMachine(local_machine);
       sionnaHelper.SetVerbose(verb);
     }
+#endif
 
   /* Load the .rou.xml file (SUMO map and scenario) */
   xmlInitParser();
