@@ -39,7 +39,8 @@
 #include "ns3/vehicle-visualizer-module.h"
 #include "ns3/MetricSupervisor.h"
 
-
+#include <libxml/parser.h>
+#include <libxml/tree.h>
 #include <unistd.h>
 #include "ns3/core-module.h"
 
@@ -99,6 +100,7 @@ main (int argc, char *argv[])
   std::string csv_name_cumulative;
   std::string sumo_netstate_file_name;
   bool vehicle_vis = false;
+  std::string sumo_polygons_file = ""; // path to SUMO .add.xml with <poly> elements
 
   int numberOfNodes;
   uint32_t nodeCounter = 0;
@@ -155,6 +157,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("sumo-config", "Location and name of SUMO configuration file", sumo_config);
   cmd.AddValue ("csv-log", "Name of the CSV log file", csv_name);
   cmd.AddValue ("vehicle-visualizer", "Activate the web-based vehicle visualizer for ms-van3t", vehicle_vis);
+  cmd.AddValue ("sumo-polygons", "Path to a SUMO .add.xml file with <poly> elements to overlay on the map", sumo_polygons_file);
   cmd.AddValue ("csv-log-cumulative", "Name of the CSV log file for the cumulative (average) PRR and latency data", csv_name_cumulative);
   cmd.AddValue ("netstate-dump-file", "Name of the SUMO netstate-dump file containing the vehicle-related information throughout the whole simulation", sumo_netstate_file_name);
   cmd.AddValue ("baseline", "Baseline for PRR calculation", m_baseline_prr);
@@ -720,6 +723,51 @@ main (int argc, char *argv[])
 
   /* start traci client with given function pointers */
   sumoClient->SumoSetup (setupNewWifiNode, shutdownWifiNode);
+
+  /* Send static polygon overlays (parking spots, H3 cells, ...) to the visualizer.
+   * SumoSetup() has already called sendMapDraw() at this point, so it is safe to call sendPolygonUpdate(). */
+  if (vehicle_vis && !sumo_polygons_file.empty ())
+    {
+      xmlDocPtr poly_doc = xmlParseFile (sumo_polygons_file.c_str ());
+      if (poly_doc == nullptr)
+        {
+          NS_LOG_ERROR ("Could not parse sumo-polygons file: " << sumo_polygons_file);
+        }
+      else
+        {
+          xmlNodePtr root = xmlDocGetRootElement (poly_doc);
+          for (xmlNodePtr node = root->children; node != nullptr; node = node->next)
+            {
+              if (node->type != XML_ELEMENT_NODE) continue;
+              if (xmlStrcmp (node->name, BAD_CAST "poly") != 0) continue;
+
+              xmlChar *xid    = xmlGetProp (node, BAD_CAST "id");
+              xmlChar *xcolor = xmlGetProp (node, BAD_CAST "color");
+              xmlChar *xshape = xmlGetProp (node, BAD_CAST "shape");
+
+              if (xid && xcolor && xshape)
+                {
+                  // Parse color "r,g,b,a" (SUMO) or "r,g,b" (no alpha → opaque)
+                  uint8_t cr = 0, cg = 0, cb = 0, ca = 255;
+                  int nr = sscanf (reinterpret_cast<const char *>(xcolor),
+                                   "%hhu,%hhu,%hhu,%hhu", &cr, &cg, &cb, &ca);
+                  if (nr < 3)
+                    NS_LOG_WARN ("Skipping poly '" << xid << "': cannot parse color '" << xcolor << "'");
+                  else
+                    {
+                      auto coords = vehicleVisualizer::parseSumoShape (
+                          reinterpret_cast<const char *>(xshape));
+                      vehicleVis->sendPolygonUpdate (
+                          reinterpret_cast<const char *>(xid), cr, cg, cb, ca, coords);
+                    }
+                }
+              if (xid)    xmlFree (xid);
+              if (xcolor) xmlFree (xcolor);
+              if (xshape) xmlFree (xshape);
+            }
+          xmlFreeDoc (poly_doc);
+        }
+    }
 
   /*** 8. Start Simulation ***/
   Simulator::Stop (Seconds(simTime));

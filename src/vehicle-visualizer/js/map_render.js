@@ -17,7 +17,10 @@ const socket = io();
 
 var map_rx = false;
 
-// Markers array
+// Polygon messages received before the map was ready; flushed after map init
+var pendingPolygons = [];
+
+// Markers array (shared between vehicles and polygons, keyed by unique ID)
 var markers = [];
 // Markers icon array ('0' for carIcon, i.e. CAR_ICO_IDX, '1' for circleIcon, i.e. CIRCLE_ICO_IDX)
 var markersicons = [];
@@ -75,6 +78,9 @@ socket.on('message', (msg) => {
 						}
 						leafletmap = draw_map(parseFloat(msg_fields[1]), parseFloat(msg_fields[2]), mapbox_token);
 						map_rx = true;
+						// Flush polygons that arrived before the map was ready
+						pendingPolygons.forEach(p => update_polygon(leafletmap, p.id, p.color, p.shape));
+						pendingPolygons = [];
 					}
 				}
 				break;
@@ -86,6 +92,17 @@ socket.on('message', (msg) => {
 					update_marker(leafletmap,msg_fields[1],parseFloat(msg_fields[2]),parseFloat(msg_fields[3]),parseFloat(msg_fields[4]));
 				}
 				break;
+			// "polygon update" message: "poly,<id>,<r>;<g>;<b>;<a>,<lon1>:<lat1>:<lon2>:<lat2>:..."
+			case 'poly':
+				if (msg_fields.length !== 4) {
+					console.error("VehicleVisualizer: Error: received a corrupted poly message from the server.");
+				} else if (!map_rx) {
+					pendingPolygons.push({id: msg_fields[1], color: msg_fields[2], shape: msg_fields[3]});
+				} else {
+					update_polygon(leafletmap, msg_fields[1], msg_fields[2], msg_fields[3]);
+				}
+				break;
+
 			// This 'case' is added just for additional safety. As the server is shut down every time a "terminate" message
 			// is received from ms-van3t and no "terminate" message is forwarded via socket.io, this point should never be
 			// reached
@@ -157,6 +174,56 @@ function update_marker(mapref,id,lat,lon,heading)
 				markersicons[id] = CAR_ICO_IDX;
 			}
 		}
+	}
+}
+
+// Updates (or creates) a polygon overlay on the map.
+// colorStr: "r;g;b;a"  (SUMO convention: a=255 fully opaque)
+// shapeStr: "lon1:lat1:lon2:lat2:..."  (raw SUMO lon,lat order; swapped here for Leaflet)
+function update_polygon(mapref, id, colorStr, shapeStr)
+{
+	if (mapref == null) {
+		console.error("VehicleVisualizer: null map reference when attempting to update a polygon.");
+		return;
+	}
+
+	// Parse color
+	const rgba = colorStr.split(';').map(Number);
+	if (rgba.length !== 4 || rgba.some(isNaN)) {
+		console.error("VehicleVisualizer: malformed color in poly message:", colorStr);
+		return;
+	}
+	const [r, g, b, a] = rgba;
+	const cssColor     = `rgb(${r},${g},${b})`;
+	const fillOpacity  = a / 255;
+	const borderOpacity = Math.min(fillOpacity + 0.2, 1.0);
+
+	// Parse shape: lon:lat:lon:lat:... -> [[lat,lon], ...]
+	const raw = shapeStr.split(':').map(parseFloat);
+	if (raw.length < 4 || raw.length % 2 !== 0 || raw.some(isNaN)) {
+		console.error("VehicleVisualizer: malformed shape in poly message:", shapeStr);
+		return;
+	}
+	const latlngs = [];
+	for (let i = 0; i < raw.length; i += 2) {
+		latlngs.push([raw[i + 1], raw[i]]); // swap lon,lat -> lat,lon for Leaflet
+	}
+
+	const style = {
+		color:       cssColor,
+		weight:      1,
+		opacity:     borderOpacity,
+		fillColor:   cssColor,
+		fillOpacity: fillOpacity,
+	};
+
+	if (id in markers) {
+		markers[id].setLatLngs(latlngs);
+		markers[id].setStyle(style);
+	} else {
+		const poly = L.polygon(latlngs, style).addTo(mapref);
+		poly.bindPopup("ID: " + id);
+		markers[id] = poly;
 	}
 }
 

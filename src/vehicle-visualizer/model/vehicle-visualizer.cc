@@ -5,6 +5,7 @@
 #include <netinet/udp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <sstream>
 #include "vehicle-visualizer.h"
 
 namespace ns3 {
@@ -248,6 +249,56 @@ namespace ns3 {
       }
 
       return sockfd;
+  }
+
+  int
+  vehicleVisualizer::sendPolygonUpdate(const std::string& polyID,
+                                       uint8_t r, uint8_t g, uint8_t b, uint8_t a,
+                                       const std::vector<std::pair<double,double>>& coords)
+  {
+      if (!m_is_connected)
+          NS_FATAL_ERROR("Error: attempted to use a non-connected vehicle visualizer client.");
+      if (!m_is_map_sent)
+          NS_FATAL_ERROR("Error in vehicle visualizer client: sendPolygonUpdate called before sendMapDraw.");
+      if (coords.empty())
+          return 0;
+
+      // Wire format: poly,<id>,<r>;<g>;<b>;<a>,<lon1>:<lat1>:<lon2>:<lat2>:...
+      std::ostringstream oss;
+      oss << "poly," << polyID << ","
+          << static_cast<int>(r) << ";" << static_cast<int>(g) << ";"
+          << static_cast<int>(b) << ";" << static_cast<int>(a) << ",";
+
+      oss.precision(7);
+      for (std::size_t i = 0; i < coords.size(); ++i) {
+          if (i > 0) oss << ":";
+          oss << coords[i].first << ":" << coords[i].second; // lon:lat
+      }
+
+      std::string msg = oss.str();
+      char* buf = new char[msg.length() + 1];
+      std::copy(msg.c_str(), msg.c_str() + msg.length() + 1, buf);
+      int ret = send(m_sockfd, buf, msg.length() + 1, 0);
+      delete[] buf;
+      return ret;
+  }
+
+  std::vector<std::pair<double,double>>
+  vehicleVisualizer::parseSumoShape(const std::string& shapeAttr)
+  {
+      // SUMO shape attribute: "lon,lat lon,lat ..." (space-separated, comma within pair)
+      std::vector<std::pair<double,double>> out;
+      std::istringstream ss(shapeAttr);
+      std::string token;
+      while (std::getline(ss, token, ' ')) {
+          if (token.empty()) continue;
+          auto comma = token.find(',');
+          if (comma == std::string::npos) continue;
+          double lon = std::stod(token.substr(0, comma));
+          double lat = std::stod(token.substr(comma + 1));
+          out.emplace_back(lon, lat);
+      }
+      return out;
   }
 
   void

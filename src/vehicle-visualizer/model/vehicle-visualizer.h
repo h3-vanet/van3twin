@@ -3,6 +3,9 @@
 #define VEHICLE_VISUALIZER_H
 
 #include "ns3/core-module.h"
+#include <vector>
+#include <utility>
+#include <string>
 #define VIS_HEADING_INVALID 361
 #define DEFAULT_NODEJS_SERVER_PATH "./src/vehicle-visualizer/js/server.js"
 
@@ -50,6 +53,16 @@ namespace ns3 {
       // If no "heading" is specified, VIS_HEADING_INVALID (i.e. no heading available) will be sent to the server
       int sendObjectUpdate(std::string objID, double lat, double lon);
       int sendObjectUpdate(std::string objID, double lat, double lon, double heading);
+
+      // Send a polygon overlay (e.g. H3 cell or parking spot) to the visualizer.
+      // coords: (lon,lat) pairs as they come from SUMO/XML; JS client swaps to lat,lon for Leaflet.
+      // r,g,b,a: SUMO color components 0-255 (a=255 fully opaque).
+      int sendPolygonUpdate(const std::string& polyID,
+                            uint8_t r, uint8_t g, uint8_t b, uint8_t a,
+                            const std::vector<std::pair<double,double>>& coords);
+
+      // Parse a SUMO shape attribute string ("lon,lat lon,lat ...") into (lon,lat) pairs.
+      static std::vector<std::pair<double,double>> parseSumoShape(const std::string& shapeAttr);
 
       // This function should be called to terminate the execution of the Node.js server
       // Normally, the user should not call it, as it is automatically called by the destructor of the vehicleVisualizer object
