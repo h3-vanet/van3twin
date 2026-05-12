@@ -98,6 +98,7 @@ udpSocket.on('message', (msg,rinfo) => {
         // Cache static polygon messages so late-connecting clients receive them
         if (msg_fields[0] === "poly" && msg_fields.length === 4) {
             polygonCache[msg_fields[1]] = msgStr;
+            console.log(`[poly] cached polygon id=${msg_fields[1]} (total cached: ${Object.keys(polygonCache).length})`);
         }
         // Forward all non-map, non-terminate messages to the client via socket.io
         io.sockets.send(msgStr);
@@ -113,6 +114,8 @@ io.on('connection', (socket) => {
 
     // As soon as a client connects, send the "map" message first, then replay all cached polygons
     io.sockets.send(mapmsg);
+    const cachedCount = Object.keys(polygonCache).length;
+    console.log(`[poly] replaying ${cachedCount} cached polygons to new client`);
     Object.values(polygonCache).forEach(p => socket.send(p));
 
     // socket.io message callback (called every time a client sends something to the server - it should

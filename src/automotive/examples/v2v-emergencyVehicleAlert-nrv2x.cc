@@ -736,12 +736,14 @@ main (int argc, char *argv[])
       // Helper: parse one .add.xml file and send every <poly> to the visualizer
       auto send_polys_from_file = [&](const std::string &add_path)
         {
+          std::cout << "[poly] parsing: " << add_path << std::endl;
           xmlDocPtr doc = xmlParseFile (add_path.c_str ());
           if (doc == nullptr)
             {
-              NS_LOG_WARN ("vehicle-visualizer: could not parse additional file: " << add_path);
+              std::cout << "[poly] ERROR: could not open/parse: " << add_path << std::endl;
               return;
             }
+          int poly_count = 0;
           xmlNodePtr root = xmlDocGetRootElement (doc);
           for (xmlNodePtr n = root->children; n != nullptr; n = n->next)
             {
@@ -763,19 +765,23 @@ main (int argc, char *argv[])
                           reinterpret_cast<const char *>(xshape));
                       vehicleVis->sendPolygonUpdate (
                           reinterpret_cast<const char *>(xid), cr, cg, cb, ca, coords);
+                      ++poly_count;
                     }
                   else
-                    NS_LOG_WARN ("vehicle-visualizer: skipping poly '" << xid
-                                 << "': bad color '" << xcolor << "'");
+                    std::cout << "[poly] WARNING: bad color '" << xcolor
+                              << "' for poly '" << xid << "'" << std::endl;
                 }
               if (xid)    xmlFree (xid);
               if (xcolor) xmlFree (xcolor);
               if (xshape) xmlFree (xshape);
             }
+          std::cout << "[poly] sent " << poly_count << " polygons from " << add_path << std::endl;
           xmlFreeDoc (doc);
         };
 
       // Open the .sumo.cfg and find <additional-files value="..."/>
+      std::cout << "[poly] reading sumo config: " << sumo_config << std::endl;
+      std::cout << "[poly] cfg_dir resolved to: " << cfg_dir << std::endl;
       xmlDocPtr cfg_doc = xmlParseFile (sumo_config.c_str ());
       if (cfg_doc != nullptr)
         {

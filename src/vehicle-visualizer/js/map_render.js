@@ -79,6 +79,7 @@ socket.on('message', (msg) => {
 						leafletmap = draw_map(parseFloat(msg_fields[1]), parseFloat(msg_fields[2]), mapbox_token);
 						map_rx = true;
 						// Flush polygons that arrived before the map was ready
+						console.log("[poly] map ready, flushing " + pendingPolygons.length + " buffered polygons");
 						pendingPolygons.forEach(p => update_polygon(leafletmap, p.id, p.color, p.shape));
 						pendingPolygons = [];
 					}
@@ -95,10 +96,12 @@ socket.on('message', (msg) => {
 			// "polygon update" message: "poly,<id>,<r>;<g>;<b>;<a>,<lon1>:<lat1>:<lon2>:<lat2>:..."
 			case 'poly':
 				if (msg_fields.length !== 4) {
-					console.error("VehicleVisualizer: Error: received a corrupted poly message from the server.");
+					console.error("VehicleVisualizer: corrupted poly message (fields=" + msg_fields.length + "):", msg);
 				} else if (!map_rx) {
+					console.log("[poly] buffering (map not ready yet) id=" + msg_fields[1]);
 					pendingPolygons.push({id: msg_fields[1], color: msg_fields[2], shape: msg_fields[3]});
 				} else {
+					console.log("[poly] drawing id=" + msg_fields[1]);
 					update_polygon(leafletmap, msg_fields[1], msg_fields[2], msg_fields[3]);
 				}
 				break;
