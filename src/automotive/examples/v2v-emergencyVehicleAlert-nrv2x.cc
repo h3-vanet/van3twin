@@ -100,6 +100,7 @@ main (int argc, char *argv[])
   std::string csv_name_cumulative;
   std::string sumo_netstate_file_name;
   bool vehicle_vis = false;
+  double sumo_wait_for_socket = 5.0; // seconds to wait for SUMO to open TraCI socket
 
   int numberOfNodes;
   uint32_t nodeCounter = 0;
@@ -156,6 +157,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("sumo-config", "Location and name of SUMO configuration file", sumo_config);
   cmd.AddValue ("csv-log", "Name of the CSV log file", csv_name);
   cmd.AddValue ("vehicle-visualizer", "Activate the web-based vehicle visualizer for ms-van3t", vehicle_vis);
+  cmd.AddValue ("sumo-wait", "Seconds to wait for SUMO to open TraCI socket", sumo_wait_for_socket);
   cmd.AddValue ("csv-log-cumulative", "Name of the CSV log file for the cumulative (average) PRR and latency data", csv_name_cumulative);
   cmd.AddValue ("netstate-dump-file", "Name of the SUMO netstate-dump file containing the vehicle-related information throughout the whole simulation", sumo_netstate_file_name);
   cmd.AddValue ("baseline", "Baseline for PRR calculation", m_baseline_prr);
@@ -651,7 +653,7 @@ main (int argc, char *argv[])
   }
 
   sumoClient->SetAttribute ("SumoAdditionalCmdOptions", StringValue (sumo_additional_options));
-  sumoClient->SetAttribute ("SumoWaitForSocket", TimeValue (Seconds (1.0)));
+  sumoClient->SetAttribute ("SumoWaitForSocket", TimeValue (Seconds (sumo_wait_for_socket)));
 
   /* Create and setup the web-based vehicle visualizer of ms-van3t */
   vehicleVisualizer vehicleVisObj;
