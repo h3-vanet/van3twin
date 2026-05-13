@@ -1,12 +1,21 @@
 #!/bin/bash
 set -e
 
+# echo "Aspetto core su 7447..."
+# while ! nc -z core 7447 2>/dev/null; do
+#     sleep 2
+# done
+# echo "Core pronto."
+
+echo "Aspetto 5 secondi per core e bridge..."
+sleep 5
+
 SUMO_FOLDER=${SUMO_FOLDER:-/sim/mappa}
 SUMO_CONFIG=${SUMO_CONFIG:-/sim/mappa/sumo_cfg/combination_normale_50.sumo.cfg}
 VEHICLE_VISUALIZER=${VEHICLE_VISUALIZER:-true}
 SUMO_GUI=${SUMO_GUI:-false}
 SUMO_UPDATES=${SUMO_UPDATES:-0.1}
-SUMO_WAIT=${SUMO_WAIT:-5s}
+SUMO_WAIT=${SUMO_WAIT:-10s}
 PENETRATION_RATE=${PENETRATION_RATE:-1.0}
 SIM_TIME=${SIM_TIME:-300}
 CSV_LOG=${CSV_LOG:-/sim/logs/results}
