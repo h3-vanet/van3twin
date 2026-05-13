@@ -142,9 +142,27 @@ namespace ns3
   }
 
   void
+  TraciClient::zmqPublish(const char* json)
+  {
+    if (m_zmq_pub == nullptr) return;
+    zmq_send(m_zmq_pub, json, strlen(json), ZMQ_DONTWAIT);
+  }
+
+  void
   TraciClient::SumoStop()
   {
     NS_LOG_FUNCTION(this);
+
+    if (m_zmq_pub != nullptr)
+      {
+        zmq_close(m_zmq_pub);
+        m_zmq_pub = nullptr;
+      }
+    if (m_zmq_context != nullptr)
+      {
+        zmq_ctx_destroy(m_zmq_context);
+        m_zmq_context = nullptr;
+      }
 
     try
       {
@@ -287,6 +305,23 @@ namespace ns3
         NS_FATAL_ERROR("Can not connect to sumo via traci: " << e.what());
       }
 
+    // Initialize ZMQ PUB socket for vehicle event publishing
+    m_zmq_context = zmq_ctx_new();
+    m_zmq_pub     = zmq_socket(m_zmq_context, ZMQ_PUB);
+    if (zmq_bind(m_zmq_pub, "tcp://*:5555") != 0)
+      {
+        NS_LOG_WARN("TraciClient: ZMQ bind on tcp://*:5555 failed: " << zmq_strerror(errno)
+                    << " — vehicle events will not be published.");
+        zmq_close(m_zmq_pub);
+        zmq_ctx_destroy(m_zmq_context);
+        m_zmq_pub     = nullptr;
+        m_zmq_context = nullptr;
+      }
+    else
+      {
+        std::cout << "[zmq] PUB socket bound on tcp://*:5555" << std::endl;
+      }
+
     if (m_vehicle_visualizer!=nullptr && m_vehicle_visualizer->isConnected())
     {
         /* Compute central position of the map to be sent to the web visualizer */
@@ -387,15 +422,28 @@ namespace ns3
               updateLocationInSionna(node_ID, pos_for_sionna, angle_for_sionna, vel_for_sionna);
             }
             
-            if (m_vehicle_visualizer!=nullptr && m_vehicle_visualizer->isConnected() && it->second.first != StationType_pedestrian)
-            {
-                libsumo::TraCIPosition lonlat = this->TraCIAPI::simulation.convertXYtoLonLat (pos.x,pos.y);
-                int rval = m_vehicle_visualizer->sendObjectUpdate (node_ID,lonlat.y,lonlat.x,this->TraCIAPI::vehicle.getAngle (node_ID));
-                if (rval<0)
-                {
-                    NS_FATAL_ERROR("Error: cannot send the object update to the vehicle visualizer for vehicle: "<<node_ID);
-                }
-            }
+            if (it->second.first != StationType_pedestrian)
+              {
+                libsumo::TraCIPosition lonlat = this->TraCIAPI::simulation.convertXYtoLonLat (pos.x, pos.y);
+                double angle = this->TraCIAPI::vehicle.getAngle (node_ID);
+
+                if (m_vehicle_visualizer!=nullptr && m_vehicle_visualizer->isConnected())
+                  {
+                    int rval = m_vehicle_visualizer->sendObjectUpdate (node_ID, lonlat.y, lonlat.x, angle);
+                    if (rval < 0)
+                      NS_FATAL_ERROR("Error: cannot send the object update to the vehicle visualizer for vehicle: " << node_ID);
+                  }
+
+                if (m_zmq_pub != nullptr)
+                  {
+                    double speed = this->TraCIAPI::vehicle.getSpeed (node_ID);
+                    char buf[256];
+                    snprintf(buf, sizeof(buf),
+                        "{\"type\":\"GpsUpdate\",\"vehicle_id\":\"%s\",\"lat\":%.7f,\"lng\":%.7f,\"speed_ms\":%.3f}",
+                        node_ID.c_str(), lonlat.y, lonlat.x, speed);
+                    zmqPublish(buf);
+                  }
+              }
           }
       }
     catch (std::exception& e)
@@ -502,6 +550,14 @@ namespace ns3
 
                 // unregister in map
                 m_NodeMap.erase(veh);
+
+                if (m_zmq_pub != nullptr)
+                  {
+                    char buf[128];
+                    snprintf(buf, sizeof(buf),
+                        "{\"type\":\"VehicleExited\",\"vehicle_id\":\"%s\"}", veh.c_str());
+                    zmqPublish(buf);
+                  }
               }
             else // if it is not in the map, create a new ns3 node for it
               {
@@ -512,6 +568,17 @@ namespace ns3
 
                 // register in the map (link vehicle to node!)
                 m_NodeMap.insert(std::pair<std::string, std::pair<StationType_t, Ptr<ns3::Node>>>(veh, inNode));
+
+                if (m_zmq_pub != nullptr)
+                  {
+                    libsumo::TraCIPosition pos_veh = this->TraCIAPI::vehicle.getPosition(veh);
+                    libsumo::TraCIPosition ll = this->TraCIAPI::simulation.convertXYtoLonLat(pos_veh.x, pos_veh.y);
+                    char buf[192];
+                    snprintf(buf, sizeof(buf),
+                        "{\"type\":\"VehicleEntered\",\"vehicle_id\":\"%s\",\"lat\":%.7f,\"lng\":%.7f}",
+                        veh.c_str(), ll.y, ll.x);
+                    zmqPublish(buf);
+                  }
               }
           }
 

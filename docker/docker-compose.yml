@@ -1,0 +1,20 @@
+services:
+  van3twin:
+    image: localhost/van3twin:v6
+    ports:
+      - "3400:3400"   # TraCI / SUMO remote control
+      - "8080:8080"   # vehicle-visualizer HTTP server
+      - "5555:5555"   # ZMQ PUB — vehicle events (GpsUpdate / VehicleEntered / VehicleExited)
+    volumes:
+      - ./mappa:/sim/mappa:ro
+    environment:
+      SUMO_FOLDER: ${SUMO_FOLDER:-/sim/mappa/sumo_cfg/}
+      SUMO_CONFIG: ${SUMO_CONFIG:-/sim/mappa/sumo_cfg/combination_normale_parked_50.sumo.cfg}
+      VEHICLE_VISUALIZER: ${VEHICLE_VISUALIZER:-true}
+    entrypoint: ["sh", "-c"]
+    command: |
+      ./ns3 run "v2v-emergencyVehicleAlert-nrv2x" -- \
+        --sumo-gui=false \
+        --sumo-folder=$$SUMO_FOLDER \
+        --sumo-config=$$SUMO_CONFIG \
+        --vehicle-visualizer=$$VEHICLE_VISUALIZER

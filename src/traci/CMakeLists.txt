@@ -17,6 +17,9 @@ set(header_files
 set(test_sources
 )
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(ZMQ REQUIRED libzmq)
+
 build_lib(
   LIBNAME traci
   SOURCE_FILES ${source_files}
@@ -26,5 +29,6 @@ build_lib(
   ${libmobility}
   ${libinternet}
   ${libvehicle-visualizer}
+  ${ZMQ_LIBRARIES}
   TEST_SOURCES ${test_sources}
 )

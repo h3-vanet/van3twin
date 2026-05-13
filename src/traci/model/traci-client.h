@@ -31,6 +31,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <zmq.h>
 
 #include "ns3/core-module.h"
 #include "ns3/mobility-module.h"
@@ -144,6 +145,11 @@ private:
   void terminateVehicleVisualizer (void);
 
   bool m_sionna = false;
+
+  // ZMQ PUB socket — publishes vehicle events on tcp://*:5555
+  void*  m_zmq_context = nullptr;
+  void*  m_zmq_pub     = nullptr;
+  void   zmqPublish (const char* json);
 
 };
 
