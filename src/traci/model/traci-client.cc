@@ -360,9 +360,11 @@ namespace ns3
         NS_FATAL_ERROR("Can not connect to sumo via traci: " << e.what());
       }
 
-    // Initialize ZMQ PUB socket for vehicle event publishing
+    // Initialize ZMQ PUSH socket for vehicle event publishing.
+    // PUSH (not PUB) so messages are buffered until a consumer connects,
+    // avoiding the ZMQ "slow joiner" problem where early events are dropped.
     m_zmq_context = zmq_ctx_new();
-    m_zmq_pub     = zmq_socket(m_zmq_context, ZMQ_PUB);
+    m_zmq_pub     = zmq_socket(m_zmq_context, ZMQ_PUSH);
     if (zmq_bind(m_zmq_pub, "tcp://*:5555") != 0)
       {
         NS_LOG_WARN("TraciClient: ZMQ bind on tcp://*:5555 failed: " << zmq_strerror(errno)
@@ -374,7 +376,7 @@ namespace ns3
       }
     else
       {
-        std::cout << "[zmq] PUB socket bound on tcp://*:5555" << std::endl;
+        std::cout << "[zmq] PUSH socket bound on tcp://*:5555" << std::endl;
       }
 
     // ZMQ PULL — receive vehicle commands from bridge

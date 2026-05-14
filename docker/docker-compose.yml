@@ -4,7 +4,7 @@ services:
     ports:
       - "3400:3400"   # TraCI / SUMO remote control
       - "8080:8080"   # vehicle-visualizer HTTP server
-      - "5555:5555"   # ZMQ PUB — vehicle events (GpsUpdate / VehicleEntered / VehicleExited)
+      - "5555:5555"   # ZMQ PUSH — vehicle events (GpsUpdate / VehicleEntered / VehicleExited)
       - "5558:5558"   # ZMQ PULL — vehicle commands from bridge (ChangeTarget / SetStop)
     volumes:
       - ./mappa:/sim/mappa:ro

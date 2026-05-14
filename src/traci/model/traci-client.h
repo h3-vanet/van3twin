@@ -146,7 +146,7 @@ private:
 
   bool m_sionna = false;
 
-  // ZMQ PUB socket — publishes vehicle events on tcp://*:5555
+  // ZMQ PUSH socket — pushes vehicle events on tcp://*:5555 (buffered, avoids slow-joiner loss)
   void*  m_zmq_context = nullptr;
   void*  m_zmq_pub     = nullptr;
   void   zmqPublish (const char* json);
