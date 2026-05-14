@@ -10,6 +10,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 #   (all required by ns-3 core and the automotive module).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
+        ca-certificates \
         cmake \
         ninja-build \
         git \
