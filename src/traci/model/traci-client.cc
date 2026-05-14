@@ -149,10 +149,65 @@ namespace ns3
   }
 
   void
+  TraciClient::ProcessCommands()
+  {
+    if (m_zmq_cmd == nullptr) return;
+    char buf[512];
+    int rc;
+    while ((rc = zmq_recv(m_zmq_cmd, buf, (int)sizeof(buf) - 1, ZMQ_DONTWAIT)) > 0)
+      {
+        buf[rc] = '\0';
+        std::string msg(buf);
+
+        auto getStr = [&](const std::string& key) -> std::string {
+          std::string search = "\"" + key + "\":\"";
+          size_t p = msg.find(search);
+          if (p == std::string::npos) return "";
+          p += search.size();
+          size_t e = msg.find('"', p);
+          return (e == std::string::npos) ? "" : msg.substr(p, e - p);
+        };
+        auto getNum = [&](const std::string& key) -> double {
+          std::string search = "\"" + key + "\":";
+          size_t p = msg.find(search);
+          if (p == std::string::npos) return 0.0;
+          p += search.size();
+          try { return std::stod(msg.substr(p)); } catch (...) { return 0.0; }
+        };
+
+        std::string type       = getStr("type");
+        std::string vehicle_id = getStr("vehicle_id");
+
+        if (type == "ChangeTarget")
+          {
+            std::string edge_id = getStr("edge_id");
+            try { this->TraCIAPI::vehicle.changeTarget(vehicle_id, edge_id); }
+            catch (...) {}
+          }
+        else if (type == "SetStop")
+          {
+            std::string lane_id = getStr("lane_id");
+            double end_pos  = getNum("end_pos");
+            double duration = getNum("duration");
+            size_t last_us  = lane_id.rfind('_');
+            std::string edge = (last_us != std::string::npos) ? lane_id.substr(0, last_us) : lane_id;
+            int lane_idx     = (last_us != std::string::npos) ? std::stoi(lane_id.substr(last_us + 1)) : 0;
+            try { this->TraCIAPI::vehicle.setStop(vehicle_id, edge, end_pos, lane_idx, duration); }
+            catch (...) {}
+          }
+      }
+  }
+
+  void
   TraciClient::SumoStop()
   {
     NS_LOG_FUNCTION(this);
 
+    if (m_zmq_cmd != nullptr)
+      {
+        zmq_close(m_zmq_cmd);
+        m_zmq_cmd = nullptr;
+      }
     if (m_zmq_pub != nullptr)
       {
         zmq_close(m_zmq_pub);
@@ -322,6 +377,22 @@ namespace ns3
         std::cout << "[zmq] PUB socket bound on tcp://*:5555" << std::endl;
       }
 
+    // ZMQ PULL — receive vehicle commands from bridge
+    if (m_zmq_context != nullptr)
+      {
+        m_zmq_cmd = zmq_socket(m_zmq_context, ZMQ_PULL);
+        if (zmq_bind(m_zmq_cmd, "tcp://*:5558") != 0)
+          {
+            NS_LOG_WARN("TraciClient: ZMQ bind on tcp://*:5558 failed: " << zmq_strerror(errno));
+            zmq_close(m_zmq_cmd);
+            m_zmq_cmd = nullptr;
+          }
+        else
+          {
+            std::cout << "[zmq] CMD PULL socket bound on tcp://*:5558" << std::endl;
+          }
+      }
+
     if (m_vehicle_visualizer!=nullptr && m_vehicle_visualizer->isConnected())
     {
         /* Compute central position of the map to be sent to the web visualizer */
@@ -364,6 +435,9 @@ namespace ns3
 
     try
       {
+        // drain any pending commands from bridge before advancing the step
+        ProcessCommands();
+
         // get current simulation time
         auto nextTime = Simulator::Now().GetSeconds() + m_synchInterval.GetSeconds() + m_startTime.GetSeconds();
 

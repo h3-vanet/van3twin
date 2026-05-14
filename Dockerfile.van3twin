@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libxml2-dev \
         libssl-dev \
         libboost-dev \
+        libzmq3-dev \
+        nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Clone upstream ns-3 ───────────────────────────────────────────────────────
@@ -113,7 +115,8 @@ RUN ./ns3 configure \
         --build-profile=optimized \
         --disable-tests \
         --disable-python \
-        --disable-examples
+        --enable-examples \
+        --disable-modules=wimax,mesh,dsr,dsdv,uan,lr-wpan,brite,click,openflow
 
 RUN ./ns3 build -j"$(nproc)"
 
@@ -134,10 +137,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libssl3 \
         libsqlite3-0 \
         libxml2 \
+        libzmq5 \
         python3 \
         cmake \
         ninja-build \
         sumo \
+        nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy compiled artifacts AND the cmake cache so "./ns3 run" can find
@@ -149,3 +154,12 @@ COPY --from=builder /build/ns-3-dev/ns3        /opt/ns3/ns3
 WORKDIR /opt/ns3
 
 ENV LD_LIBRARY_PATH=/opt/ns3/build/lib
+
+EXPOSE 8080
+EXPOSE 3400
+EXPOSE 5555
+EXPOSE 5558
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+CMD ["/entrypoint.sh"]

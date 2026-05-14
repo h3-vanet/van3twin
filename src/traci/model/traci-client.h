@@ -151,6 +151,10 @@ private:
   void*  m_zmq_pub     = nullptr;
   void   zmqPublish (const char* json);
 
+  // ZMQ PULL socket — receives vehicle commands from bridge on tcp://*:5558
+  void*  m_zmq_cmd     = nullptr;
+  void   ProcessCommands ();
+
 };
 
 } // end namespace ns3
