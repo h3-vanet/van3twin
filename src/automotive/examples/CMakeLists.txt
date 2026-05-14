@@ -160,25 +160,25 @@ build_lib_example(
 #        ${libtraci}
 #)
 
- build_lib_example(
- NAME v2v-carla-nrv2x
- SOURCE_FILES v2v-carlaMobility-nrv2x.cc
- LIBRARIES_TO_LINK
- ${libcarla}
- ${libautomotive}
- ${libnr}
- ${libtraci}
- )
+#build_lib_example(
+# NAME v2v-carla-nrv2x
+# SOURCE_FILES v2v-carlaMobility-nrv2x.cc
+# LIBRARIES_TO_LINK
+# ${libcarla}
+# ${libautomotive}
+# ${libnr}
+# ${libtraci}
+#)
 
- build_lib_example(
- NAME v2v-carla-80211p
- SOURCE_FILES v2v-carlaMobility-80211p.cc
- LIBRARIES_TO_LINK
- ${libcarla}
- ${libautomotive}
- ${libwave}
- ${libtraci}
- )
+#build_lib_example(
+# NAME v2v-carla-80211p
+# SOURCE_FILES v2v-carlaMobility-80211p.cc
+# LIBRARIES_TO_LINK
+# ${libcarla}
+# ${libautomotive}
+# ${libwave}
+# ${libtraci}
+#)
 
 build_lib_example(
        NAME v2v-coexistence-80211p-nrv2x
@@ -194,23 +194,23 @@ build_lib_example(
 #        ${libautomotive}
 #)
 
-build_lib_example(
-        NAME v2v-cam-exchange-sionna-80211p
-        SOURCE_FILES v2v-cam-exchange-sionna-80211p.cc
-        LIBRARIES_TO_LINK
-        ${libautomotive}
-)
+#build_lib_example(
+#        NAME v2v-cam-exchange-sionna-80211p
+#        SOURCE_FILES v2v-cam-exchange-sionna-80211p.cc
+#        LIBRARIES_TO_LINK
+#        ${libautomotive}
+#)
 
-build_lib_example(
-        NAME v2v-cam-exchange-sionna-nrv2x
-        SOURCE_FILES v2v-cam-exchange-sionna-nrv2x.cc
-        LIBRARIES_TO_LINK
-        ${libautomotive}
-)
+#build_lib_example(
+#        NAME v2v-cam-exchange-sionna-nrv2x
+#        SOURCE_FILES v2v-cam-exchange-sionna-nrv2x.cc
+#        LIBRARIES_TO_LINK
+#        ${libautomotive}
+#)
 
-build_lib_example(
-        NAME v2v-cam-exchange-sionna-ltev2x
-        SOURCE_FILES v2v-cam-exchange-sionna-ltev2x.cc
-        LIBRARIES_TO_LINK
-        ${libautomotive}
-)
+#build_lib_example(
+#        NAME v2v-cam-exchange-sionna-ltev2x
+#        SOURCE_FILES v2v-cam-exchange-sionna-ltev2x.cc
+#        LIBRARIES_TO_LINK
+#        ${libautomotive}
+#)
