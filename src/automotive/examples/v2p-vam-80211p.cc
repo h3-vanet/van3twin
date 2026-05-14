@@ -1,4 +1,3 @@
-#include "ns3/carla-module.h"
 //#include "ns3/automotive-module.h"
 #include "ns3/traci-module.h"
 #include "ns3/internet-module.h"

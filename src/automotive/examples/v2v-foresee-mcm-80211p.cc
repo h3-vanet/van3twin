@@ -26,7 +26,6 @@
 #define LC_TIME_MSEC 1500
 
 
-#include "ns3/carla-module.h"
 
 #include "ns3/vector.h"
 #include "ns3/string.h"

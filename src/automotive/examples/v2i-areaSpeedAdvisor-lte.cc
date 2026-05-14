@@ -20,7 +20,6 @@
 */
 
 //#include "ns3/automotive-module.h"
-#include "ns3/carla-module.h"
 #include "ns3/areaSpeedAdvisorClientLTE-helper.h"
 #include "ns3/areaSpeedAdvisorClientLTE.h"
 #include "ns3/areaSpeedAdvisorServerLTE-helper.h"

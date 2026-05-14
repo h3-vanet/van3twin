@@ -20,7 +20,6 @@
 */
 
 //#include "ns3/automotive-module.h"
-#include "ns3/carla-module.h"
 #include "ns3/trafficManagerClient80211p-helper.h"
 #include "ns3/trafficManagerServer80211p-helper.h"
 #include "ns3/trafficManagerClient80211p.h"

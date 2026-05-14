@@ -20,7 +20,6 @@
 */
 
 //#include "ns3/automotive-module.h"
-#include "ns3/carla-module.h"
 #include "ns3/trafficManagerClientLTE-helper.h"
 #include "ns3/trafficManagerServerLTE-helper.h"
 #include "ns3/trafficManagerServerLTE.h"

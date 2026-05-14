@@ -19,7 +19,6 @@
  *  Carlos Mateo Risma Carletti, Politecnico di Torino (carlosrisma@gmail.com)
 */
 
-#include "ns3/carla-module.h"
 //#include "ns3/automotive-module.h"
 #include "ns3/emergencyVehicleAlert-helper.h"
 #include "ns3/emergencyVehicleAlert.h"

@@ -18,7 +18,6 @@
  *  Francesco Raviglione, Politecnico di Torino (francescorav.es483@gmail.com)
  *  Carlos Mateo Risma Carletti, Politecnico di Torino (carlosrisma@gmail.com)
 */
-#include "ns3/carla-module.h"
 //#include "ns3/automotive-module.h"
 #include "ns3/emergencyVehicleWarningClient80211p-helper.h"
 #include "ns3/emergencyVehicleWarningClient80211p.h"

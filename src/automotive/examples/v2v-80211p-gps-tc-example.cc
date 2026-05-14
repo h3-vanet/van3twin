@@ -20,7 +20,6 @@
 
 
 //#include "ns3/automotive-module.h"
-#include "ns3/carla-module.h"
 #include "ns3/OpenCDAClient.h"
 #include "ns3/simpleCAMSender-gps-tc.h"
 #include "ns3/simpleVAMSender-gps-tc.h"

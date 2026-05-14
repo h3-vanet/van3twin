@@ -180,12 +180,12 @@ build_lib_example(
 # ${libtraci}
 #)
 
-build_lib_example(
-       NAME v2v-coexistence-80211p-nrv2x
-       SOURCE_FILES v2v-coexistence-80211p-nrv2x.cc
-       LIBRARIES_TO_LINK
-       ${libautomotive}
-)
+#build_lib_example(
+#       NAME v2v-coexistence-80211p-nrv2x
+#       SOURCE_FILES v2v-coexistence-80211p-nrv2x.cc
+#       LIBRARIES_TO_LINK
+#       ${libautomotive}
+#)
 
 #build_lib_example(
 #        NAME v2v-coexistence-80211p-ltev2x
