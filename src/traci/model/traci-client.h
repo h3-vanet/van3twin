@@ -45,6 +45,8 @@
 
 #include "ns3/sionna-connection-handler.h"
 
+#include "ns3/v2x-gossip-app.h"
+
 #define STARTUP_FCN std::function<Ptr<Node>(std::string,TraciClient::StationTypeTraCI_t)>
 #define SHUTDOWN_FCN std::function<void(Ptr<Node>,std::string)>
 
@@ -77,6 +79,9 @@ public:
   std::string GetVehicleId(Ptr<Node> node);
 
   uint32_t GetVehicleMapSize(); // size of vehicle map
+
+  void RegisterGossipApp(const std::string& vehicleId, Ptr<V2xGossipApp> app);
+  void RegisterVehicleId(const std::string& sumoId, uint64_t rustId);
 
   std::vector<std::string> getVehicleNodeMapIds(); // get all vehicle node ids
 
@@ -154,6 +159,15 @@ private:
   // ZMQ PULL socket — receives vehicle commands from bridge on tcp://*:5558
   void*  m_zmq_cmd     = nullptr;
   void   ProcessCommands ();
+
+  // Gossip relay — ZMQ PULL 5560 (Rust→ns-3) / PUSH 5561 (ns-3→Rust)
+  void*  m_zmq_gossip_in  = nullptr;
+  void*  m_zmq_gossip_out = nullptr;
+  std::map<std::string, Ptr<V2xGossipApp>>  m_gossipApps;
+  std::map<std::string, uint64_t>           m_sumo_to_u64;
+  void   ProcessGossipIn();
+  void   OnGossipReceived(const std::string& receiverSumoId,
+                          const uint8_t* data, uint32_t len);
 
 };
 

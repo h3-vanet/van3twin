@@ -203,6 +203,16 @@ namespace ns3
   {
     NS_LOG_FUNCTION(this);
 
+    if (m_zmq_gossip_in != nullptr)
+      {
+        zmq_close(m_zmq_gossip_in);
+        m_zmq_gossip_in = nullptr;
+      }
+    if (m_zmq_gossip_out != nullptr)
+      {
+        zmq_close(m_zmq_gossip_out);
+        m_zmq_gossip_out = nullptr;
+      }
     if (m_zmq_cmd != nullptr)
       {
         zmq_close(m_zmq_cmd);
@@ -395,6 +405,37 @@ namespace ns3
           }
       }
 
+    // Gossip relay sockets
+    if (m_zmq_context != nullptr)
+      {
+        m_zmq_gossip_in = zmq_socket(m_zmq_context, ZMQ_PULL);
+        int hwm = 500;
+        zmq_setsockopt(m_zmq_gossip_in, ZMQ_RCVHWM, &hwm, sizeof(hwm));
+        if (zmq_bind(m_zmq_gossip_in, "tcp://*:5560") != 0)
+          {
+            NS_LOG_WARN("TraciClient: ZMQ bind on tcp://*:5560 failed: " << zmq_strerror(errno));
+            zmq_close(m_zmq_gossip_in);
+            m_zmq_gossip_in = nullptr;
+          }
+        else
+          {
+            std::cout << "[zmq] GOSSIP PULL bound on tcp://*:5560" << std::endl;
+          }
+
+        m_zmq_gossip_out = zmq_socket(m_zmq_context, ZMQ_PUSH);
+        zmq_setsockopt(m_zmq_gossip_out, ZMQ_SNDHWM, &hwm, sizeof(hwm));
+        if (zmq_bind(m_zmq_gossip_out, "tcp://*:5561") != 0)
+          {
+            NS_LOG_WARN("TraciClient: ZMQ bind on tcp://*:5561 failed: " << zmq_strerror(errno));
+            zmq_close(m_zmq_gossip_out);
+            m_zmq_gossip_out = nullptr;
+          }
+        else
+          {
+            std::cout << "[zmq] GOSSIP PUSH bound on tcp://*:5561" << std::endl;
+          }
+      }
+
     if (m_vehicle_visualizer!=nullptr && m_vehicle_visualizer->isConnected())
     {
         /* Compute central position of the map to be sent to the web visualizer */
@@ -439,6 +480,7 @@ namespace ns3
       {
         // drain any pending commands from bridge before advancing the step
         ProcessCommands();
+        ProcessGossipIn();
 
         // get current simulation time
         auto nextTime = Simulator::Now().GetSeconds() + m_synchInterval.GetSeconds() + m_startTime.GetSeconds();
@@ -822,5 +864,119 @@ std::string TraciClient::GetStationId(Ptr<Node> node)
 
   return foundNode;
 }
+
+  void
+  TraciClient::RegisterVehicleId(const std::string& sumoId, uint64_t rustId)
+  {
+    m_sumo_to_u64[sumoId] = rustId;
+  }
+
+  void
+  TraciClient::RegisterGossipApp(const std::string& vehicleId, Ptr<V2xGossipApp> app)
+  {
+    m_gossipApps[vehicleId] = app;
+    app->SetReceiveCallback(
+      [this, vehicleId](const std::string& /*vehId*/, const uint8_t* data, uint32_t len) {
+        OnGossipReceived(vehicleId, data, len);
+      });
+  }
+
+  void
+  TraciClient::ProcessGossipIn()
+  {
+    if (m_zmq_gossip_in == nullptr) return;
+
+    static const size_t BUF_SIZE = 65536;
+    static uint8_t buf[BUF_SIZE];
+    int rc;
+
+    static uint64_t gossip_drop_count = 0;
+
+    while ((rc = zmq_recv(m_zmq_gossip_in, buf, BUF_SIZE - 1, ZMQ_DONTWAIT)) > 0)
+      {
+        buf[rc] = '\0';
+        std::string msg(reinterpret_cast<char*>(buf), rc);
+
+        // Extract sumo_id, sender_id, and payload from envelope JSON using simple string search
+        auto getStr = [&](const std::string& key) -> std::string {
+          std::string search = "\"" + key + "\":\"";
+          size_t p = msg.find(search);
+          if (p == std::string::npos) return "";
+          p += search.size();
+          size_t e = msg.find('"', p);
+          return (e == std::string::npos) ? "" : msg.substr(p, e - p);
+        };
+        auto getU64 = [&](const std::string& key) -> uint64_t {
+          std::string search = "\"" + key + "\":";
+          size_t p = msg.find(search);
+          if (p == std::string::npos) return 0;
+          p += search.size();
+          try { return std::stoull(msg.substr(p)); } catch (...) { return 0; }
+        };
+
+        std::string sumo_id  = getStr("sumo_id");
+        uint64_t    sender_id = getU64("sender_id");
+
+        if (sumo_id.empty()) continue;
+
+        // Keep mapping current
+        if (sender_id != 0)
+          m_sumo_to_u64[sumo_id] = sender_id;
+
+        auto it = m_gossipApps.find(sumo_id);
+        if (it == m_gossipApps.end()) continue;
+
+        // Forward the full envelope bytes — V2xGossipApp broadcasts them via NR-V2X
+        it->second->Send(buf, static_cast<uint32_t>(rc));
+      }
+
+    if (rc == -1 && errno != EAGAIN)
+      {
+        gossip_drop_count++;
+        std::cout << "[gossip-drop] total=" << gossip_drop_count << std::endl;
+      }
+  }
+
+  void
+  TraciClient::OnGossipReceived(const std::string& receiverSumoId,
+                                const uint8_t* data, uint32_t len)
+  {
+    if (m_zmq_gossip_out == nullptr) return;
+
+    auto it = m_sumo_to_u64.find(receiverSumoId);
+    if (it == m_sumo_to_u64.end()) return;
+    uint64_t receiver_id = it->second;
+
+    // The bytes arriving via UDP are the full envelope: {sumo_id, sender_id, payload:{...}}
+    // Extract the inner payload field for forwarding to Rust.
+    std::string envelope(reinterpret_cast<const char*>(data), len);
+    std::string payload_key = "\"payload\":";
+    size_t p = envelope.find(payload_key);
+    std::string payload;
+    if (p != std::string::npos)
+      {
+        payload = envelope.substr(p + payload_key.size());
+        // Strip trailing closing brace of the outer envelope
+        if (!payload.empty() && payload.back() == '}')
+          payload.pop_back();
+      }
+    else
+      {
+        // Fallback: forward raw string (should not happen in practice)
+        payload = envelope;
+      }
+
+    // Build outbound message: {"receiver_id":<u64>,"payload":<GossipMessage JSON>}
+    std::string out = "{\"receiver_id\":" + std::to_string(receiver_id)
+                    + ",\"payload\":" + payload + "}";
+
+    static uint64_t gossip_drop_count = 0;
+    int rc = zmq_send(m_zmq_gossip_out, out.c_str(), out.size(), ZMQ_DONTWAIT);
+    if (rc == -1 && errno != EAGAIN)
+      {
+        gossip_drop_count++;
+        std::cout << "[gossip-drop] out total=" << gossip_drop_count << std::endl;
+      }
+  }
 
 } // namespace ns3

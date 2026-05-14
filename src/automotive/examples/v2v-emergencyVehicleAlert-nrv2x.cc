@@ -20,6 +20,8 @@
 //#include "ns3/automotive-module.h"
 #include "ns3/emergencyVehicleAlert-helper.h"
 #include "ns3/emergencyVehicleAlert.h"
+#include "ns3/v2x-gossip-app-helper.h"
+#include "ns3/v2x-gossip-app.h"
 #include "ns3/traci-module.h"
 #include "ns3/config-store.h"
 #include "ns3/network-module.h"
@@ -698,8 +700,18 @@ main (int argc, char *argv[])
       //ApplicationContainer CAMSenderApp = CamSenderHelper.Install (includedNode);
       ApplicationContainer AppSample = EmergencyVehicleAlertHelper.Install (includedNode);
 
-      AppSample.Start (Seconds (0.0));
-      AppSample.Stop (Seconds(simTime) - Simulator::Now () - Seconds (0.1));
+      // EVA disabled for clean gossip PLR measurements
+      // AppSample.Start (Seconds (0.0));
+      // AppSample.Stop (Seconds(simTime) - Simulator::Now () - Seconds (0.1));
+
+      /* Install gossip relay application */
+      V2xGossipAppHelper gossipHelper;
+      gossipHelper.SetAttribute ("VehicleId", StringValue (vehicleID));
+      ApplicationContainer GossipApp = gossipHelper.Install (includedNode);
+      GossipApp.Start (Seconds (0.0));
+      GossipApp.Stop (Seconds(simTime) - Simulator::Now () - Seconds (0.1));
+      sumoClient->RegisterGossipApp (vehicleID,
+          GossipApp.Get(0)->GetObject<V2xGossipApp> ());
 
       return includedNode;
     };
