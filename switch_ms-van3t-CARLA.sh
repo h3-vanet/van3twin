@@ -208,8 +208,11 @@ if [ "$mode" = "base" ]; then
 	fi
 
 	python3.7 adapt_files.py CARLA
-fi 
+fi
 
+sed -i 's/#include <vector>/#include <vector>\n#include <cstdint>/' ./src/wifi/model/block-ack-type.h
+sed -i 's/#include <vector>/#include <vector>\n#include <cstdint>/' ./src/network/utils/bit-serializer.h
+sed -i 's/#include <vector>/#include <vector>\n#include <cstdint>/' ./src/network/utils/bit-deserializer.h
 
 if [ "$mode" = "CARLA" ]; then
 	read -p "Current mode is 'CARLA', do you wish to switch to base ms-van3t? (WARNING: CARLA-OpenCDA capabilities are disabled in this mode)."
