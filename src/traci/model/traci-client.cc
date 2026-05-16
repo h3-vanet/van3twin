@@ -581,7 +581,7 @@ namespace ns3
           {
             m_vehicle_visualizer->sendExperimentUpdate(
                 "normal",
-                (uint32_t)m_gossipApps.size(),  // density proxy: vehicles with gossip app
+                (uint32_t)m_gossipSend.size(),  // density proxy: vehicles with gossip app
                 1, 500,                          // neighbor_k, gossip_interval_ms (hardcoded)
                 0, 0, 0, 0, 0.0);               // placeholders — assignment/handover metrics from Rust
           }
