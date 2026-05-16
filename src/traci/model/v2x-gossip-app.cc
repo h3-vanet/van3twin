@@ -1,5 +1,6 @@
 #include "v2x-gossip-app.h"
 
+#include <iostream>
 #include "ns3/log.h"
 #include "ns3/udp-socket-factory.h"
 #include "ns3/inet-socket-address.h"
@@ -71,7 +72,11 @@ V2xGossipApp::Send(const uint8_t* data, uint32_t len)
   if (!m_socket) return;
   Ptr<Packet> pkt = Create<Packet>(data, len);
   InetSocketAddress dest(Ipv4Address("225.0.0.0"), m_port);
-  m_socket->SendTo(pkt, 0, dest);
+  int ret = m_socket->SendTo(pkt, 0, dest);
+  std::cout << "[gossip-udp] " << m_vehicleId
+            << " SEND bytes=" << len
+            << " dst=225.0.0.0:" << m_port
+            << " ret=" << ret << std::endl;
 }
 
 void
@@ -84,6 +89,8 @@ V2xGossipApp::Receive(Ptr<Socket> socket)
       uint32_t size = pkt->GetSize();
       uint8_t* buf  = new uint8_t[size];
       pkt->CopyData(buf, size);
+      std::cout << "[gossip-udp] " << m_vehicleId
+                << " RECV bytes=" << size << std::endl;
       if (m_rxCallback)
         m_rxCallback(m_vehicleId, buf, size);
       delete[] buf;

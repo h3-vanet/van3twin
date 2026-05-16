@@ -929,7 +929,16 @@ std::string TraciClient::GetStationId(Ptr<Node> node)
           m_sumo_to_u64[sumo_id] = sender_id;
 
         auto it = m_gossipSend.find(sumo_id);
-        if (it == m_gossipSend.end()) continue;
+        if (it == m_gossipSend.end())
+          {
+            std::cout << "[gossip-in] DROP: no GossipApp for sumo_id=" << sumo_id << std::endl;
+            continue;
+          }
+
+        std::cout << "[gossip-in] sumo_id=" << sumo_id
+                  << " sender_id=" << sender_id
+                  << " bytes=" << rc
+                  << " → UDP multicast 225.0.0.0:8001" << std::endl;
 
         // Forward the full envelope bytes — V2xGossipApp broadcasts them via NR-V2X
         it->second(buf, static_cast<uint32_t>(rc));
@@ -949,7 +958,11 @@ std::string TraciClient::GetStationId(Ptr<Node> node)
     if (m_zmq_gossip_out == nullptr) return;
 
     auto it = m_sumo_to_u64.find(receiverSumoId);
-    if (it == m_sumo_to_u64.end()) return;
+    if (it == m_sumo_to_u64.end())
+      {
+        std::cout << "[gossip-rx] DROP: no u64 mapping for sumo_id=" << receiverSumoId << std::endl;
+        return;
+      }
     uint64_t receiver_id = it->second;
 
     // The bytes arriving via UDP are the full envelope: {sumo_id, sender_id, payload:{...}}
@@ -974,6 +987,11 @@ std::string TraciClient::GetStationId(Ptr<Node> node)
     // Build outbound message: {"receiver_id":<u64>,"payload":<GossipMessage JSON>}
     std::string out = "{\"receiver_id\":" + std::to_string(receiver_id)
                     + ",\"payload\":" + payload + "}";
+
+    std::cout << "[gossip-rx] sumo_id=" << receiverSumoId
+              << " receiver_id=" << receiver_id
+              << " payload_bytes=" << payload.size()
+              << " → ZMQ PUSH 5561" << std::endl;
 
     static uint64_t gossip_drop_count = 0;
     int rc = zmq_send(m_zmq_gossip_out, out.c_str(), out.size(), ZMQ_DONTWAIT);
