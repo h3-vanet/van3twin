@@ -551,6 +551,17 @@ namespace ns3
                     int rval = m_vehicle_visualizer->sendObjectUpdate (node_ID, lonlat.y, lonlat.x, angle);
                     if (rval < 0)
                       NS_FATAL_ERROR("Error: cannot send the object update to the vehicle visualizer for vehicle: " << node_ID);
+
+                    // Send gossip metrics only when they changed (throttle to avoid UDP flood)
+                    uint32_t tx  = m_gossipTxCount.count(node_ID)  ? m_gossipTxCount.at(node_ID)  : 0;
+                    uint32_t rx  = m_gossipRxCount.count(node_ID)   ? m_gossipRxCount.at(node_ID)   : 0;
+                    uint32_t nbr = m_gossipNeighbors.count(node_ID) ? (uint32_t)m_gossipNeighbors.at(node_ID).size() : 0;
+                    if (tx != m_lastGossipTxSent[node_ID] || rx != m_lastGossipRxSent[node_ID])
+                      {
+                        m_vehicle_visualizer->sendGossipUpdate(node_ID, tx, rx, nbr);
+                        m_lastGossipTxSent[node_ID] = tx;
+                        m_lastGossipRxSent[node_ID] = rx;
+                      }
                   }
 
                 if (m_zmq_pub != nullptr)
@@ -563,6 +574,16 @@ namespace ns3
                     zmqPublish(buf);
                   }
               }
+          }
+
+        // Send one experiment-state summary per sim step (assignment/handover are 0 placeholders — those metrics live in Rust)
+        if (m_vehicle_visualizer != nullptr && m_vehicle_visualizer->isConnected())
+          {
+            m_vehicle_visualizer->sendExperimentUpdate(
+                "normal",
+                (uint32_t)m_gossipApps.size(),  // density proxy: vehicles with gossip app
+                1, 500,                          // neighbor_k, gossip_interval_ms (hardcoded)
+                0, 0, 0, 0, 0.0);               // placeholders — assignment/handover metrics from Rust
           }
       }
     catch (std::exception& e)
@@ -942,6 +963,7 @@ std::string TraciClient::GetStationId(Ptr<Node> node)
 
         // Forward the full envelope bytes — V2xGossipApp broadcasts them via NR-V2X
         it->second(buf, static_cast<uint32_t>(rc));
+        m_gossipTxCount[sumo_id]++;
       }
 
     if (rc == -1 && errno != EAGAIN)
@@ -987,6 +1009,22 @@ std::string TraciClient::GetStationId(Ptr<Node> node)
     // Build outbound message: {"receiver_id":<u64>,"payload":<GossipMessage JSON>}
     std::string out = "{\"receiver_id\":" + std::to_string(receiver_id)
                     + ",\"payload\":" + payload + "}";
+
+    // Track RX count and unique neighbors for visualizer metrics
+    m_gossipRxCount[receiverSumoId]++;
+    // Extract sender sumo_id from the envelope (data contains the full broadcast envelope)
+    {
+      std::string env(reinterpret_cast<const char*>(data), len);
+      std::string search = "\"sumo_id\":\"";
+      size_t p = env.find(search);
+      if (p != std::string::npos)
+        {
+          p += search.size();
+          size_t e = env.find('"', p);
+          if (e != std::string::npos)
+            m_gossipNeighbors[receiverSumoId].insert(env.substr(p, e - p));
+        }
+    }
 
     std::cout << "[gossip-rx] sumo_id=" << receiverSumoId
               << " receiver_id=" << receiver_id

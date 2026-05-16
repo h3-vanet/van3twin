@@ -24,6 +24,7 @@
 #define TRACI_H
 
 #include <map>
+#include <set>
 #include <vector>
 #include <string>
 #include <functional>
@@ -168,6 +169,13 @@ private:
   // Store Send callbacks as std::function to avoid pulling V2xGossipApp type into this header
   std::map<std::string, std::function<void(const uint8_t*, uint32_t)>> m_gossipSend;
   std::map<std::string, uint64_t>           m_sumo_to_u64;
+
+  // Per-vehicle gossip metrics for visualizer (color coding, delivery ratio, neighbor count)
+  std::map<std::string, uint32_t>              m_gossipTxCount;
+  std::map<std::string, uint32_t>              m_gossipRxCount;
+  std::map<std::string, std::set<std::string>> m_gossipNeighbors;
+  std::map<std::string, uint32_t>              m_lastGossipTxSent;  // throttle: last sent value
+  std::map<std::string, uint32_t>              m_lastGossipRxSent;
   void   ProcessGossipIn();
   void   OnGossipReceived(const std::string& receiverSumoId,
                           const uint8_t* data, uint32_t len);

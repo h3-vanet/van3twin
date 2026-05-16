@@ -61,6 +61,19 @@ namespace ns3 {
                             uint8_t r, uint8_t g, uint8_t b, uint8_t a,
                             const std::vector<std::pair<double,double>>& coords);
 
+      // Send per-vehicle gossip metrics to the visualizer (color coding + popup info).
+      // Only call when tx or rx has changed since the last call (throttle in TraciClient).
+      int sendGossipUpdate(const std::string& vehicleId,
+                           uint32_t txCount, uint32_t rxCount, uint32_t neighborCount);
+
+      // Send one experiment-state summary per simulation step.
+      // Assignment/handover fields are 0 placeholders (those metrics live in Rust, not C++).
+      int sendExperimentUpdate(const std::string& scenario, uint32_t density,
+                               uint32_t k, uint32_t intervalMs,
+                               uint32_t assignments, uint32_t won,
+                               uint32_t doubleBooking, uint32_t handovers,
+                               double avgSpeedKmh);
+
       // Parse a SUMO shape attribute string ("lon,lat lon,lat ...") into (lon,lat) pairs.
       static std::vector<std::pair<double,double>> parseSumoShape(const std::string& shapeAttr);
 

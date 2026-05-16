@@ -25,30 +25,27 @@ var markers = [];
 // Markers icon array ('0' for carIcon, i.e. CAR_ICO_IDX, '1' for circleIcon, i.e. CIRCLE_ICO_IDX)
 var markersicons = [];
 
+// Per-vehicle gossip state: id → {tx, rx, neighbors}
+var vehicleGossip = {};
+
 // Map reference variable
 var leafletmap = null;
 
-// Create a new icon for the "car" markers
-var icon_length = 102;
-var icon_height = 277;
-var icon_length_circle = 144;
-var icon_height_circle = 143;
-var icon_scale_factor = 11;
-var carIcon = L.icon({
-	iconUrl: './img/triangle.png',
+// SVG DivIcon factory — replaces static triangle.png / circle.png.
+// Color reflects gossip state; leaflet.rotatedMarker.js still handles rotation via CSS transform.
+function makeVehicleIcon(color, hasHeading) {
+	const size = 20;
+	const svg = hasHeading
+		? `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+		     <polygon points="10,1 19,19 10,15 1,19" fill="${color}" stroke="white" stroke-width="1.5"/>
+		   </svg>`
+		: `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+		     <circle cx="10" cy="10" r="8" fill="${color}" stroke="white" stroke-width="1.5"/>
+		   </svg>`;
+	return L.divIcon({ html: svg, className: '', iconSize: [size, size], iconAnchor: [size/2, size/2] });
+}
 
-	iconSize:     [icon_length/icon_scale_factor, icon_height/icon_scale_factor], // size of the icon
-	iconAnchor:   [icon_length/(icon_scale_factor*2), icon_height/(icon_scale_factor*2)], // point of the icon which will correspond to marker's location
-	popupAnchor:  [0, 0] // point from which the popup should open relative to the iconAnchor
-});
-
-var circleIcon = L.icon({
-	iconUrl: './img/circle.png',
-
-	iconSize:     [icon_length_circle/icon_scale_factor, icon_height_circle/icon_scale_factor], // size of the icon
-	iconAnchor:   [icon_length_circle/(icon_scale_factor*2), icon_height_circle/(icon_scale_factor*2)], // point of the icon which will correspond to marker's location
-	popupAnchor:  [0, 0] // point from which the popup should open relative to the iconAnchor
-});
+const DEFAULT_COLOR = '#9e9e9e';
 
 
 // Receive the first message from the server
@@ -106,6 +103,43 @@ socket.on('message', (msg) => {
 				}
 				break;
 
+			// gossip,<id>,<tx>,<rx>,<neighbors> — per-vehicle gossip metrics
+			case 'gossip': {
+				if (msg_fields.length < 5) { console.warn("VehicleVisualizer: malformed gossip message"); break; }
+				const id  = msg_fields[1];
+				const tx  = parseInt(msg_fields[2]);
+				const rx  = parseInt(msg_fields[3]);
+				const nbr = parseInt(msg_fields[4]);
+				const prev = vehicleGossip[id] || {tx: 0, rx: 0, neighbors: 0};
+				vehicleGossip[id] = {tx, rx, neighbors: nbr};
+				const color = gossipColor(tx, rx);
+				if (id in markers && markers[id].setIcon) {
+					markers[id].setIcon(makeVehicleIcon(color, markersicons[id] === CAR_ICO_IDX));
+					const dr = tx > 0 ? Math.round(rx / tx * 100) + '%' : '-';
+					markers[id].setPopupContent(
+						`<b>${id}</b><br>TX: ${tx} &nbsp; RX: ${rx}<br>Neighbors: ${nbr}<br>Delivery Ratio: ${dr}`);
+				}
+				if (tx > prev.tx && id in markers && markers[id].getLatLng)
+					showTxRing(leafletmap, markers[id].getLatLng().lat, markers[id].getLatLng().lng);
+				updateStatsPanel();
+				break;
+			}
+
+			// experiment,<scenario>,<density>,<k>,<interval>,<assignments>,<won>,<double>,<handovers>,<speed>
+			case 'experiment': {
+				if (msg_fields.length < 10) break;
+				document.getElementById('exp-scenario').textContent    = msg_fields[1]  || '-';
+				document.getElementById('exp-density').textContent     = msg_fields[2]  || '-';
+				document.getElementById('exp-k').textContent           = msg_fields[3]  || '-';
+				document.getElementById('exp-interval').textContent    = msg_fields[4]  || '-';
+				document.getElementById('exp-assignments').textContent = msg_fields[5]  || '0';
+				document.getElementById('exp-won').textContent         = msg_fields[6]  || '0';
+				document.getElementById('exp-double').textContent      = msg_fields[7]  || '0';
+				document.getElementById('exp-handovers').textContent   = msg_fields[8]  || '0';
+				document.getElementById('exp-speed').textContent       = msg_fields[9]  || '-';
+				break;
+			}
+
 			// This 'case' is added just for additional safety. As the server is shut down every time a "terminate" message
 			// is received from ms-van3t and no "terminate" message is forwarded via socket.io, this point should never be
 			// reached
@@ -127,54 +161,26 @@ function update_marker(mapref,id,lat,lon,heading)
 	} else {
 		// If the object ID has never been seen before, create a new marker
 		if(!(id in markers)) {
-			let newmarker;
-			let initial_icon;
-			let initial_icon_idx;
-
-			// Set a circular icon when the heading is not available, otherwise use the regular carIcon (i.e. for the time being, a triangle)
-			if(heading >= VIS_HEADING_INVALID) {
-				initial_icon = circleIcon;
-				initial_icon_idx = CIRCLE_ICO_IDX;
-			} else {
-				initial_icon = carIcon;
-				initial_icon_idx = CAR_ICO_IDX;
-			}
-
-			// Attempt to use an icon marker
-			newmarker = L.marker([lat,lon], {icon: initial_icon}).addTo(mapref);
+			const hasHeading = heading < VIS_HEADING_INVALID;
+			const icon_idx   = hasHeading ? CAR_ICO_IDX : CIRCLE_ICO_IDX;
+			const newmarker  = L.marker([lat, lon], {icon: makeVehicleIcon(DEFAULT_COLOR, hasHeading)}).addTo(mapref);
 			newmarker.setRotationAngle(heading);
-
-			// Old circle marker (no more used)
-			// newmarker = L.circleMarker([lat,lon],{radius: 8, fillColor: "#c48612", color: "#000000", weight: 1, opacity: 1, fillOpacity: 0.8}).addTo(mapref);
-			// Set the initial popup value (if the heading is invalid/unavailable, do not specify any value in degrees
-			if(heading < VIS_HEADING_INVALID) {
-				newmarker.bindPopup("ID: "+id+" - Heading: "+heading+" deg");
-			} else {
-				newmarker.bindPopup("ID: "+id+" - Heading: unavailable");
-			}
-			markers[id]=newmarker;
-			markersicons[id]=initial_icon_idx;
-		// If the object ID has already been seen before, just update its attributes (i.e. position, rotation angle and popup content)
+			newmarker.bindPopup(`<b>${id}</b><br>Heading: ${hasHeading ? heading + ' deg' : 'unavailable'}`);
+			markers[id]      = newmarker;
+			markersicons[id] = icon_idx;
+		// If the object ID has already been seen before, just update position and rotation
 		} else {
-			let marker = markers[id];
-			marker.setLatLng([lat,lon]);
+			const marker     = markers[id];
+			const hasHeading = heading < VIS_HEADING_INVALID;
+			const newIdx     = hasHeading ? CAR_ICO_IDX : CIRCLE_ICO_IDX;
+			marker.setLatLng([lat, lon]);
 			marker.setRotationAngle(heading);
-			// Update the popup content if the heading value becomes invalid/unavailable after being available
-			// or if the heading value if actually available (to specify the most up-to-date heading value)
-			if(heading >= VIS_HEADING_INVALID && markersicons[id] === CAR_ICO_IDX) {
-				marker.setPopupContent("ID: "+id+" - Heading: unavailable");
-			} else if(heading < VIS_HEADING_INVALID) {
-				marker.setPopupContent("ID: "+id+" - Heading: "+heading+" deg");
-			}
-
-			// If the heading becomes unavailable or invalid (but it was not before), change the icon of the vehicle to a circle
-			if(heading >= VIS_HEADING_INVALID && markersicons[id] === CAR_ICO_IDX) {
-				marker.setIcon(circleIcon);
-				markersicons[id] = CIRCLE_ICO_IDX;
-			// If the heading becomes available after being unavailable, change the icon of the vehicle to the "car" icon
-			} else if(heading < VIS_HEADING_INVALID && markersicons[id] === CIRCLE_ICO_IDX) {
-				marker.setIcon(carIcon);
-				markersicons[id] = CAR_ICO_IDX;
+			// If heading availability changed, rebuild icon (color preserved from last gossip update)
+			if (newIdx !== markersicons[id]) {
+				const g = vehicleGossip[id];
+				const color = g ? gossipColor(g.tx, g.rx) : DEFAULT_COLOR;
+				marker.setIcon(makeVehicleIcon(color, hasHeading));
+				markersicons[id] = newIdx;
 			}
 		}
 	}
@@ -228,6 +234,39 @@ function update_polygon(mapref, id, colorStr, shapeStr)
 		poly.bindPopup("ID: " + id);
 		markers[id] = poly;
 	}
+}
+
+// Returns vehicle marker color based on gossip TX/RX state
+function gossipColor(tx, rx) {
+	if (tx > 0 && rx > 0) return '#4caf50';  // green  — active, receiving
+	if (tx > 0)           return '#ff9800';  // orange — sending, not yet receiving
+	return '#9e9e9e';                         // grey   — no gossip yet
+}
+
+// Show expanding ring at (lat,lon) to visualise a gossip radio transmission (~400m NR-V2X range)
+function showTxRing(mapref, lat, lon) {
+	if (!mapref) return;
+	const ring = L.circle([lat, lon], {
+		radius: 400, color: '#4fc3f7', fillOpacity: 0, opacity: 0.7, weight: 2
+	}).addTo(mapref);
+	setTimeout(() => mapref.removeLayer(ring), 1500);
+}
+
+// Recompute and display aggregate gossip statistics in the stats panel
+function updateStatsPanel() {
+	const vals       = Object.values(vehicleGossip);
+	const totalTx    = vals.reduce((s, v) => s + v.tx, 0);
+	const totalRx    = vals.reduce((s, v) => s + v.rx, 0);
+	const active     = vals.filter(v => v.tx > 0).length;
+	const connected  = vals.filter(v => v.rx > 0).length;
+	const dr         = totalTx > 0 ? Math.round(totalRx / totalTx * 100) + '%' : '-';
+	const connRatio  = vals.length > 0 ? Math.round(connected / vals.length * 100) + '%' : '0%';
+	document.getElementById('stat-vehicles').textContent       = vals.length;
+	document.getElementById('stat-gossip-active').textContent  = active;
+	document.getElementById('stat-total-tx').textContent       = totalTx;
+	document.getElementById('stat-total-rx').textContent       = totalRx;
+	document.getElementById('stat-delivery-ratio').textContent = dr;
+	document.getElementById('stat-connected-ratio').textContent= connRatio;
 }
 
 // This function is used to draw the whole map at the beginning, on which vehicles will be placed

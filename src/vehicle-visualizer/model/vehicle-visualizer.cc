@@ -283,6 +283,47 @@ namespace ns3 {
       return ret;
   }
 
+  int
+  vehicleVisualizer::sendGossipUpdate(const std::string& vehicleId,
+                                      uint32_t txCount, uint32_t rxCount,
+                                      uint32_t neighborCount)
+  {
+      if (!m_is_connected) return -1;
+
+      std::string msg = "gossip," + vehicleId + ","
+                      + std::to_string(txCount) + ","
+                      + std::to_string(rxCount) + ","
+                      + std::to_string(neighborCount);
+      char* buf = new char[msg.length() + 1];
+      std::copy(msg.c_str(), msg.c_str() + msg.length() + 1, buf);
+      int ret = send(m_sockfd, buf, msg.length() + 1, 0);
+      delete[] buf;
+      return ret;
+  }
+
+  int
+  vehicleVisualizer::sendExperimentUpdate(const std::string& scenario, uint32_t density,
+                                          uint32_t k, uint32_t intervalMs,
+                                          uint32_t assignments, uint32_t won,
+                                          uint32_t doubleBooking, uint32_t handovers,
+                                          double avgSpeedKmh)
+  {
+      if (!m_is_connected) return -1;
+
+      std::ostringstream oss;
+      oss.precision(1);
+      oss << "experiment," << scenario << ","
+          << density << "," << k << "," << intervalMs << ","
+          << assignments << "," << won << "," << doubleBooking << ","
+          << handovers << "," << std::fixed << avgSpeedKmh;
+      std::string msg = oss.str();
+      char* buf = new char[msg.length() + 1];
+      std::copy(msg.c_str(), msg.c_str() + msg.length() + 1, buf);
+      int ret = send(m_sockfd, buf, msg.length() + 1, 0);
+      delete[] buf;
+      return ret;
+  }
+
   std::vector<std::pair<double,double>>
   vehicleVisualizer::parseSumoShape(const std::string& shapeAttr)
   {
