@@ -13,7 +13,7 @@ html, body, #mapid {
   background: rgba(20,20,20,0.85); color: #eee;
   padding: 10px 14px; border-radius: 8px;
   font-family: monospace; font-size: 13px; min-width: 165px;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 #experiment-panel {
@@ -21,7 +21,7 @@ html, body, #mapid {
   background: rgba(20,20,20,0.85); color: #eee;
   padding: 10px 14px; border-radius: 8px;
   font-family: monospace; font-size: 13px; min-width: 165px;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .stats-title {
