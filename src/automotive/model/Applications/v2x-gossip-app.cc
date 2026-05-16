@@ -51,9 +51,6 @@ V2xGossipApp::StartApplication()
   InetSocketAddress local = InetSocketAddress(Ipv4Address::GetAny(), m_port);
   m_socket->Bind(local);
 
-  // Join multicast group so ns-3 delivers packets to all receivers
-  m_socket->MulticastJoinGroup(0, Ipv4Address("225.0.0.0"));
-
   m_socket->SetRecvCallback(MakeCallback(&V2xGossipApp::Receive, this));
 }
 
