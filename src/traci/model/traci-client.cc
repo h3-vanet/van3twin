@@ -31,7 +31,7 @@
 #include <netinet/in.h>
 
 #include "traci-client.h"
-#include "ns3/v2x-gossip-app.h"
+#include "v2x-gossip-app.h"
 
 namespace ns3
 {

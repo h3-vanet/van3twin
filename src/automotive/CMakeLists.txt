@@ -16,7 +16,6 @@ Set(source_files
         helper/areaSpeedAdvisorClientLTE-helper.cc
         helper/areaSpeedAdvisorServerLTE-helper.cc
         helper/emergencyVehicleAlert-helper.cc
-        helper/v2x-gossip-app-helper.cc
         helper/v2xEmulator-helper.cc
         helper/simpleCAMSender-helper.cc
         helper/simpleVAMSender-helper.cc
@@ -47,7 +46,6 @@ Set(source_files
         model/Applications/emergencyVehicleWarningClient80211p.cc
 
         model/Applications/emergencyVehicleAlert.cc
-        model/Applications/v2x-gossip-app.cc
         model/Facilities/denBasicService.cc
         model/Facilities/denData.cc
         model/Facilities/ITSSOriginatingTableEntry.cc
@@ -1577,7 +1575,6 @@ set(header_files
         helper/areaSpeedAdvisorClient80211p-helper.h
         helper/areaSpeedAdvisorServer80211p-helper.h
         helper/emergencyVehicleAlert-helper.h
-        helper/v2x-gossip-app-helper.h
         helper/v2xEmulator-helper.h
         helper/simpleCAMSender-helper.h
         helper/simpleVAMSender-helper.h
@@ -1595,7 +1592,6 @@ set(header_files
         model/Applications/areaSpeedAdvisorClientLTE.h
         model/Applications/areaSpeedAdvisorServerLTE.h
         model/Applications/emergencyVehicleAlert.h
-        model/Applications/v2x-gossip-app.h
         model/Applications/simpleCAMSender-gps-tc.h
         model/Applications/simpleVAMSender-gps-tc.h
 
