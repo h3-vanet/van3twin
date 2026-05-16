@@ -696,12 +696,14 @@ main (int argc, char *argv[])
       EmergencyVehicleAlertHelper.SetAttribute ("IpAddr", Ipv4AddressValue(groupAddress4));
       i++;
 
+      // EVA disabled for clean gossip PLR measurements.
+      // Install() alone is not enough — ns-3 defaults start time to Seconds(0),
+      // so the app would run anyway. The NR-V2X bearer is activated globally
+      // before this lambda and does not depend on the EVA app being installed.
       //ApplicationContainer CAMSenderApp = CamSenderHelper.Install (includedNode);
-      ApplicationContainer AppSample = EmergencyVehicleAlertHelper.Install (includedNode);
-
-      // EVA disabled for clean gossip PLR measurements
-      // AppSample.Start (Seconds (0.0));
-      // AppSample.Stop (Seconds(simTime) - Simulator::Now () - Seconds (0.1));
+      //ApplicationContainer AppSample = EmergencyVehicleAlertHelper.Install (includedNode);
+      //AppSample.Start (Seconds (0.0));
+      //AppSample.Stop (Seconds(simTime) - Simulator::Now () - Seconds (0.1));
 
       /* Install gossip relay application */
       V2xGossipAppHelper gossipHelper;
