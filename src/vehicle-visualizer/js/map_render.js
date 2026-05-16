@@ -115,9 +115,9 @@ socket.on('message', (msg) => {
 				const color = gossipColor(tx, rx);
 				if (id in markers && markers[id].setIcon) {
 					markers[id].setIcon(makeVehicleIcon(color, markersicons[id] === CAR_ICO_IDX));
-					const dr = tx > 0 ? Math.round(rx / tx * 100) + '%' : '-';
+					const dr = tx > 0 ? Math.min(100, Math.round(rx / tx * 100)) : '-';
 					markers[id].setPopupContent(
-						`<b>${id}</b><br>TX: ${tx} &nbsp; RX: ${rx}<br>Neighbors: ${nbr}<br>Delivery Ratio: ${dr}`);
+						`<b>${id}</b><br>TX rounds: ${tx} &nbsp; RX: ${rx}<br>Neighbors: ${nbr}<br>Avg Delivery: ${dr !== '-' ? dr + '%' : '-'}`);
 				}
 				if (tx > prev.tx && id in markers && markers[id].getLatLng)
 					showTxRing(leafletmap, markers[id].getLatLng().lat, markers[id].getLatLng().lng);
@@ -254,19 +254,22 @@ function showTxRing(mapref, lat, lon) {
 
 // Recompute and display aggregate gossip statistics in the stats panel
 function updateStatsPanel() {
-	const vals       = Object.values(vehicleGossip);
-	const totalTx    = vals.reduce((s, v) => s + v.tx, 0);
-	const totalRx    = vals.reduce((s, v) => s + v.rx, 0);
-	const active     = vals.filter(v => v.tx > 0).length;
+	const vals           = Object.values(vehicleGossip);
+	const totalTx        = vals.reduce((s, v) => s + v.tx, 0);
+	const totalRx        = vals.reduce((s, v) => s + v.rx, 0);
+	const vehiclesWithTx = vals.filter(v => v.tx > 0);
+	// Per-vehicle average delivery ratio: avoids >100% from broadcast fan-out
+	const avgDr = vehiclesWithTx.length > 0
+		? Math.round(vehiclesWithTx.reduce((s, v) => s + (v.rx / v.tx), 0) / vehiclesWithTx.length * 100)
+		: '-';
 	const connected  = vals.filter(v => v.rx > 0).length;
-	const dr         = totalTx > 0 ? Math.round(totalRx / totalTx * 100) + '%' : '-';
-	const connRatio  = vals.length > 0 ? Math.round(connected / vals.length * 100) + '%' : '0%';
-	document.getElementById('stat-vehicles').textContent       = vals.length;
-	document.getElementById('stat-gossip-active').textContent  = active;
-	document.getElementById('stat-total-tx').textContent       = totalTx;
-	document.getElementById('stat-total-rx').textContent       = totalRx;
-	document.getElementById('stat-delivery-ratio').textContent = dr;
-	document.getElementById('stat-connected-ratio').textContent= connRatio;
+	const connRatio  = vals.length > 0 ? Math.round(connected / vals.length * 100) : 0;
+	document.getElementById('stat-vehicles').textContent        = vals.length;
+	document.getElementById('stat-gossip-active').textContent   = vehiclesWithTx.length;
+	document.getElementById('stat-total-tx').textContent        = totalTx;
+	document.getElementById('stat-total-rx').textContent        = totalRx;
+	document.getElementById('stat-delivery-ratio').textContent  = avgDr !== '-' ? avgDr + '%' : '-';
+	document.getElementById('stat-connected-ratio').textContent = connRatio + '%';
 }
 
 // This function is used to draw the whole map at the beginning, on which vehicles will be placed
