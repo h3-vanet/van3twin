@@ -125,7 +125,7 @@ socket.on('message', (msg) => {
 				break;
 			}
 
-			// experiment,<scenario>,<density>,<k>,<interval>,<assignments>,<won>,<double>,<handovers>,<speed>
+			// experiment,<scenario>,<density>,<k>,<interval>,<assignments>,<won>,<double>,<handovers>,<speed>,<simtime_s>
 			case 'experiment': {
 				if (msg_fields.length < 10) break;
 				document.getElementById('exp-scenario').textContent    = msg_fields[1]  || '-';
@@ -137,6 +137,8 @@ socket.on('message', (msg) => {
 				document.getElementById('exp-double').textContent      = msg_fields[7]  || '0';
 				document.getElementById('exp-handovers').textContent   = msg_fields[8]  || '0';
 				document.getElementById('exp-speed').textContent       = msg_fields[9]  || '-';
+				if (msg_fields[10] !== undefined)
+					document.getElementById('exp-simtime').textContent = formatSimTime(msg_fields[10]);
 				break;
 			}
 
@@ -234,6 +236,15 @@ function update_polygon(mapref, id, colorStr, shapeStr)
 		poly.bindPopup("ID: " + id);
 		markers[id] = poly;
 	}
+}
+
+// Format simulation seconds as M:SS (e.g. 125.3 → "2:05")
+function formatSimTime(s) {
+	const sec = parseFloat(s);
+	if (isNaN(sec)) return '-';
+	const m = Math.floor(sec / 60);
+	const r = Math.floor(sec % 60);
+	return `${m}:${r.toString().padStart(2, '0')}`;
 }
 
 // Returns vehicle marker color based on gossip TX/RX state

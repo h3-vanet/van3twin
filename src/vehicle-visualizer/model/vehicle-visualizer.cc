@@ -306,7 +306,7 @@ namespace ns3 {
                                           uint32_t k, uint32_t intervalMs,
                                           uint32_t assignments, uint32_t won,
                                           uint32_t doubleBooking, uint32_t handovers,
-                                          double avgSpeedKmh)
+                                          double avgSpeedKmh, double simTimeSec)
   {
       if (!m_is_connected) return -1;
 
@@ -315,7 +315,7 @@ namespace ns3 {
       oss << "experiment," << scenario << ","
           << density << "," << k << "," << intervalMs << ","
           << assignments << "," << won << "," << doubleBooking << ","
-          << handovers << "," << std::fixed << avgSpeedKmh;
+          << handovers << "," << std::fixed << avgSpeedKmh << "," << simTimeSec;
       std::string msg = oss.str();
       char* buf = new char[msg.length() + 1];
       std::copy(msg.c_str(), msg.c_str() + msg.length() + 1, buf);

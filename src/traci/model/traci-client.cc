@@ -583,7 +583,8 @@ namespace ns3
                 "normal",
                 (uint32_t)m_gossipSend.size(),  // density proxy: vehicles with gossip app
                 1, 500,                          // neighbor_k, gossip_interval_ms (hardcoded)
-                0, 0, 0, 0, 0.0);               // placeholders — assignment/handover metrics from Rust
+                0, 0, 0, 0, 0.0,               // placeholders — assignment/handover metrics from Rust
+                Simulator::Now().GetSeconds()); // ns-3 simulation clock
           }
       }
     catch (std::exception& e)

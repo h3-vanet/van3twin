@@ -72,7 +72,7 @@ namespace ns3 {
                                uint32_t k, uint32_t intervalMs,
                                uint32_t assignments, uint32_t won,
                                uint32_t doubleBooking, uint32_t handovers,
-                               double avgSpeedKmh);
+                               double avgSpeedKmh, double simTimeSec);
 
       // Parse a SUMO shape attribute string ("lon,lat lon,lat ...") into (lon,lat) pairs.
       static std::vector<std::pair<double,double>> parseSumoShape(const std::string& shapeAttr);
