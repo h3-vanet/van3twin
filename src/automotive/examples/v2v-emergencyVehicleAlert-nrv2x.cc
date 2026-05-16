@@ -21,7 +21,6 @@
 #include "ns3/emergencyVehicleAlert-helper.h"
 #include "ns3/emergencyVehicleAlert.h"
 #include "ns3/v2x-gossip-app-helper.h"
-#include "ns3/v2x-gossip-app.h"
 #include "ns3/traci-module.h"
 #include "ns3/config-store.h"
 #include "ns3/network-module.h"
@@ -710,8 +709,7 @@ main (int argc, char *argv[])
       ApplicationContainer GossipApp = gossipHelper.Install (includedNode);
       GossipApp.Start (Seconds (0.0));
       GossipApp.Stop (Seconds(simTime) - Simulator::Now () - Seconds (0.1));
-      sumoClient->RegisterGossipApp (vehicleID,
-          GossipApp.Get(0)->GetObject<V2xGossipApp> ());
+      sumoClient->RegisterGossipApp (vehicleID, GossipApp.Get(0));
 
       return includedNode;
     };

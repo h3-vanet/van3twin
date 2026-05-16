@@ -45,7 +45,9 @@
 
 #include "ns3/sionna-connection-handler.h"
 
-#include "ns3/v2x-gossip-app.h"
+// No include of v2x-gossip-app.h here — would create a circular link dependency
+// (automotive → traci → automotive). The full type is only needed in traci-client.cc.
+// RegisterGossipApp accepts Ptr<Application> and casts internally.
 
 #define STARTUP_FCN std::function<Ptr<Node>(std::string,TraciClient::StationTypeTraCI_t)>
 #define SHUTDOWN_FCN std::function<void(Ptr<Node>,std::string)>
@@ -80,7 +82,7 @@ public:
 
   uint32_t GetVehicleMapSize(); // size of vehicle map
 
-  void RegisterGossipApp(const std::string& vehicleId, Ptr<V2xGossipApp> app);
+  void RegisterGossipApp(const std::string& vehicleId, Ptr<Application> app);
   void RegisterVehicleId(const std::string& sumoId, uint64_t rustId);
 
   std::vector<std::string> getVehicleNodeMapIds(); // get all vehicle node ids
@@ -163,7 +165,8 @@ private:
   // Gossip relay — ZMQ PULL 5560 (Rust→ns-3) / PUSH 5561 (ns-3→Rust)
   void*  m_zmq_gossip_in  = nullptr;
   void*  m_zmq_gossip_out = nullptr;
-  std::map<std::string, Ptr<V2xGossipApp>>  m_gossipApps;
+  // Store Send callbacks as std::function to avoid pulling V2xGossipApp type into this header
+  std::map<std::string, std::function<void(const uint8_t*, uint32_t)>> m_gossipSend;
   std::map<std::string, uint64_t>           m_sumo_to_u64;
   void   ProcessGossipIn();
   void   OnGossipReceived(const std::string& receiverSumoId,

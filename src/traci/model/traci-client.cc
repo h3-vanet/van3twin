@@ -31,6 +31,7 @@
 #include <netinet/in.h>
 
 #include "traci-client.h"
+#include "ns3/v2x-gossip-app.h"
 
 namespace ns3
 {
@@ -872,9 +873,13 @@ std::string TraciClient::GetStationId(Ptr<Node> node)
   }
 
   void
-  TraciClient::RegisterGossipApp(const std::string& vehicleId, Ptr<V2xGossipApp> app)
+  TraciClient::RegisterGossipApp(const std::string& vehicleId, Ptr<Application> appBase)
   {
-    m_gossipApps[vehicleId] = app;
+    Ptr<V2xGossipApp> app = appBase->GetObject<V2xGossipApp>();
+    if (!app) return;
+    m_gossipSend[vehicleId] = [app](const uint8_t* data, uint32_t len) {
+      app->Send(data, len);
+    };
     app->SetReceiveCallback(
       [this, vehicleId](const std::string& /*vehId*/, const uint8_t* data, uint32_t len) {
         OnGossipReceived(vehicleId, data, len);
@@ -923,11 +928,11 @@ std::string TraciClient::GetStationId(Ptr<Node> node)
         if (sender_id != 0)
           m_sumo_to_u64[sumo_id] = sender_id;
 
-        auto it = m_gossipApps.find(sumo_id);
-        if (it == m_gossipApps.end()) continue;
+        auto it = m_gossipSend.find(sumo_id);
+        if (it == m_gossipSend.end()) continue;
 
         // Forward the full envelope bytes — V2xGossipApp broadcasts them via NR-V2X
-        it->second->Send(buf, static_cast<uint32_t>(rc));
+        it->second(buf, static_cast<uint32_t>(rc));
       }
 
     if (rc == -1 && errno != EAGAIN)
