@@ -115,9 +115,9 @@ socket.on('message', (msg) => {
 				const color = gossipColor(tx, rx);
 				if (id in markers && markers[id].setIcon) {
 					markers[id].setIcon(makeVehicleIcon(color, markersicons[id] === CAR_ICO_IDX));
-					const dr = tx > 0 ? Math.min(100, Math.round(rx / tx * 100)) : '-';
+					const fanout = tx > 0 ? (rx / tx).toFixed(1) : '-';
 					markers[id].setPopupContent(
-						`<b>${id}</b><br>TX rounds: ${tx} &nbsp; RX: ${rx}<br>Neighbors: ${nbr}<br>Avg Delivery: ${dr !== '-' ? dr + '%' : '-'}`);
+						`<b>${id}</b><br>TX rounds: ${tx} &nbsp; RX: ${rx}<br>Neighbors: ${nbr}<br>Avg Fanout: ${fanout} rx/tx`);
 				}
 				if (tx > prev.tx && id in markers && markers[id].getLatLng)
 					showTxRing(leafletmap, markers[id].getLatLng().lat, markers[id].getLatLng().lng);
@@ -259,8 +259,8 @@ function updateStatsPanel() {
 	const totalRx        = vals.reduce((s, v) => s + v.rx, 0);
 	const vehiclesWithTx = vals.filter(v => v.tx > 0);
 	// Per-vehicle average delivery ratio: avoids >100% from broadcast fan-out
-	const avgDr = vehiclesWithTx.length > 0
-		? Math.round(vehiclesWithTx.reduce((s, v) => s + (v.rx / v.tx), 0) / vehiclesWithTx.length * 100)
+	const avgFanout = vehiclesWithTx.length > 0
+		? (vehiclesWithTx.reduce((s, v) => s + (v.rx / v.tx), 0) / vehiclesWithTx.length).toFixed(1)
 		: '-';
 	const connected  = vals.filter(v => v.rx > 0).length;
 	const connRatio  = vals.length > 0 ? Math.round(connected / vals.length * 100) : 0;
@@ -268,7 +268,7 @@ function updateStatsPanel() {
 	document.getElementById('stat-gossip-active').textContent   = vehiclesWithTx.length;
 	document.getElementById('stat-total-tx').textContent        = totalTx;
 	document.getElementById('stat-total-rx').textContent        = totalRx;
-	document.getElementById('stat-delivery-ratio').textContent  = avgDr !== '-' ? avgDr + '%' : '-';
+	document.getElementById('stat-delivery-ratio').textContent  = avgFanout !== '-' ? avgFanout + ' rx/tx' : '-';
 	document.getElementById('stat-connected-ratio').textContent = connRatio + '%';
 }
 
