@@ -72,11 +72,7 @@ V2xGossipApp::Send(const uint8_t* data, uint32_t len)
   if (!m_socket) return;
   Ptr<Packet> pkt = Create<Packet>(data, len);
   InetSocketAddress dest(Ipv4Address("225.0.0.0"), m_port);
-  int ret = m_socket->SendTo(pkt, 0, dest);
-  std::cout << "[gossip-udp] " << m_vehicleId
-            << " SEND bytes=" << len
-            << " dst=225.0.0.0:" << m_port
-            << " ret=" << ret << std::endl;
+  m_socket->SendTo(pkt, 0, dest);
 }
 
 void
@@ -87,13 +83,11 @@ V2xGossipApp::Receive(Ptr<Socket> socket)
   while ((pkt = socket->RecvFrom(from)) != nullptr)
     {
       uint32_t size = pkt->GetSize();
-      uint8_t* buf  = new uint8_t[size];
-      pkt->CopyData(buf, size);
-      std::cout << "[gossip-udp] " << m_vehicleId
-                << " RECV bytes=" << size << std::endl;
+      static uint8_t buf[65536];
+      uint32_t safe_size = std::min(size, static_cast<uint32_t>(sizeof(buf)));
+      pkt->CopyData(buf, safe_size);
       if (m_rxCallback)
-        m_rxCallback(m_vehicleId, buf, size);
-      delete[] buf;
+        m_rxCallback(m_vehicleId, buf, safe_size);
     }
 }
 

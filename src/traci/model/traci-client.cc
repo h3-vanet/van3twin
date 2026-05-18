@@ -204,6 +204,17 @@ namespace ns3
   {
     NS_LOG_FUNCTION(this);
 
+    // Shut down async gossip logger — drain remaining messages then join
+    if (m_logThread.joinable())
+      {
+        {
+          std::lock_guard<std::mutex> lock(m_logMutex);
+          m_logRunning = false;
+        }
+        m_logCv.notify_all();
+        m_logThread.join();
+      }
+
     if (m_zmq_gossip_in != nullptr)
       {
         zmq_close(m_zmq_gossip_in);
@@ -437,6 +448,10 @@ namespace ns3
           }
       }
 
+    // Start async gossip logger background thread
+    m_logRunning = true;
+    m_logThread = std::thread(&TraciClient::LogThreadFn, this);
+
     if (m_vehicle_visualizer!=nullptr && m_vehicle_visualizer->isConnected())
     {
         /* Compute central position of the map to be sent to the web visualizer */
@@ -510,6 +525,11 @@ namespace ns3
   {
     NS_LOG_FUNCTION(this);
 
+    // Batch accumulator for position updates — sent as one UDP datagram per step
+    std::vector<VehiclePosEntry> visBatch;
+    bool doVisBatch = (m_vehicle_visualizer != nullptr && m_vehicle_visualizer->isConnected());
+    if (doVisBatch) visBatch.reserve(m_NodeMap.size());
+
     try
       {
         // iterate over all nodes in the map
@@ -546,21 +566,25 @@ namespace ns3
                 libsumo::TraCIPosition lonlat = this->TraCIAPI::simulation.convertXYtoLonLat (pos.x, pos.y);
                 double angle = this->TraCIAPI::vehicle.getAngle (node_ID);
 
-                if (m_vehicle_visualizer!=nullptr && m_vehicle_visualizer->isConnected())
+                if (doVisBatch)
                   {
-                    int rval = m_vehicle_visualizer->sendObjectUpdate (node_ID, lonlat.y, lonlat.x, angle);
-                    if (rval < 0)
-                      NS_FATAL_ERROR("Error: cannot send the object update to the vehicle visualizer for vehicle: " << node_ID);
+                    // Accumulate position for batch send after the loop
+                    visBatch.push_back({node_ID, lonlat.y, lonlat.x, angle});
 
                     // Send gossip metrics only when they changed (throttle to avoid UDP flood)
-                    uint32_t tx  = m_gossipTxCount.count(node_ID)  ? m_gossipTxCount.at(node_ID)  : 0;
-                    uint32_t rx  = m_gossipRxCount.count(node_ID)   ? m_gossipRxCount.at(node_ID)   : 0;
-                    uint32_t nbr = m_gossipNeighbors.count(node_ID) ? (uint32_t)m_gossipNeighbors.at(node_ID).size() : 0;
-                    if (tx != m_lastGossipTxSent[node_ID] || rx != m_lastGossipRxSent[node_ID])
+                    auto txIt  = m_gossipTxCount.find(node_ID);
+                    auto rxIt  = m_gossipRxCount.find(node_ID);
+                    auto nbrIt = m_gossipNeighbors.find(node_ID);
+                    uint32_t tx  = (txIt  != m_gossipTxCount.end())  ? txIt->second  : 0;
+                    uint32_t rx  = (rxIt  != m_gossipRxCount.end())  ? rxIt->second  : 0;
+                    uint32_t nbr = (nbrIt != m_gossipNeighbors.end()) ? (uint32_t)nbrIt->second.size() : 0;
+                    auto& lastTx = m_lastGossipTxSent[node_ID];
+                    auto& lastRx = m_lastGossipRxSent[node_ID];
+                    if (tx != lastTx || rx != lastRx)
                       {
                         m_vehicle_visualizer->sendGossipUpdate(node_ID, tx, rx, nbr);
-                        m_lastGossipTxSent[node_ID] = tx;
-                        m_lastGossipRxSent[node_ID] = rx;
+                        lastTx = tx;
+                        lastRx = rx;
                       }
                   }
 
@@ -574,6 +598,14 @@ namespace ns3
                     zmqPublish(buf);
                   }
               }
+          }
+
+        // Flush batch position update — single UDP datagram for all vehicles this step
+        if (doVisBatch && !visBatch.empty())
+          {
+            int rval = m_vehicle_visualizer->sendBatchUpdate(visBatch);
+            if (rval < 0)
+              NS_FATAL_ERROR("Error: cannot send batch position update to vehicle visualizer");
           }
 
         // Send one experiment-state summary per sim step (assignment/handover are 0 placeholders — those metrics live in Rust)
@@ -692,6 +724,20 @@ namespace ns3
                 // unregister in map
                 m_NodeMap.erase(veh);
 
+                // clean up all per-vehicle gossip state to prevent unbounded map growth
+                m_gossipSend.erase(veh);
+                m_sumo_to_u64.erase(veh);
+                m_gossipTxCount.erase(veh);
+                m_gossipRxCount.erase(veh);
+                m_gossipNeighbors.erase(veh);
+                m_lastGossipTxSent.erase(veh);
+                m_lastGossipRxSent.erase(veh);
+                m_gossipTxLog.erase(veh);
+                m_gossipRxLog.erase(veh);
+                m_gossipTxTotal.erase(veh);
+                m_gossipRxTotal.erase(veh);
+                m_gossipLastLogTime.erase(veh);
+
                 if (m_zmq_pub != nullptr)
                   {
                     char buf[128];
@@ -769,6 +815,16 @@ namespace ns3
 
                         // Unregister in map and update iterator
                         it = m_NodeMap.erase(it);
+                        // gossip maps: erase is no-op for pedestrians (they don't register gossip)
+                        // but included here for defensive completeness
+                        m_gossipTxCount.erase(node_ID);
+                        m_gossipRxCount.erase(node_ID);
+                        m_gossipNeighbors.erase(node_ID);
+                        m_gossipTxLog.erase(node_ID);
+                        m_gossipRxLog.erase(node_ID);
+                        m_gossipTxTotal.erase(node_ID);
+                        m_gossipRxTotal.erase(node_ID);
+                        m_gossipLastLogTime.erase(node_ID);
                       } else {
                         ++it;
                       }
@@ -957,14 +1013,27 @@ std::string TraciClient::GetStationId(Ptr<Node> node)
             continue;
           }
 
-        std::cout << "[gossip-in] sumo_id=" << sumo_id
-                  << " sender_id=" << sender_id
-                  << " bytes=" << rc
-                  << " → UDP multicast 225.0.0.0:8001" << std::endl;
-
         // Forward the full envelope bytes — V2xGossipApp broadcasts them via NR-V2X
         it->second(buf, static_cast<uint32_t>(rc));
         m_gossipTxCount[sumo_id]++;
+        m_gossipTxLog[sumo_id]++;
+        m_gossipTxTotal[sumo_id]++;
+        {
+          double now = Simulator::Now().GetSeconds();
+          bool time_trigger = (now - m_gossipLastLogTime[sumo_id]) >= 30.0;
+          if (m_gossipTxLog[sumo_id] % 100 == 0 || time_trigger)
+            {
+              char logbuf[256];
+              std::snprintf(logbuf, sizeof(logbuf),
+                  "[gossip-summary-tx] sumo_id=%s total_tx=%u total_rx=%u neighbors=%zu",
+                  sumo_id.c_str(), m_gossipTxTotal[sumo_id],
+                  m_gossipRxTotal.count(sumo_id) ? m_gossipRxTotal.at(sumo_id) : 0,
+                  m_gossipNeighbors.count(sumo_id) ? m_gossipNeighbors.at(sumo_id).size() : 0);
+              GossipLog(logbuf);
+              m_gossipTxLog[sumo_id] = 0;
+              m_gossipLastLogTime[sumo_id] = now;
+            }
+        }
       }
 
     if (rc == -1 && errno != EAGAIN)
@@ -1013,6 +1082,8 @@ std::string TraciClient::GetStationId(Ptr<Node> node)
 
     // Track RX count and unique neighbors for visualizer metrics
     m_gossipRxCount[receiverSumoId]++;
+    m_gossipRxLog[receiverSumoId]++;
+    m_gossipRxTotal[receiverSumoId]++;
     // Extract sender sumo_id from the envelope (data contains the full broadcast envelope)
     {
       std::string env(reinterpret_cast<const char*>(data), len);
@@ -1026,11 +1097,23 @@ std::string TraciClient::GetStationId(Ptr<Node> node)
             m_gossipNeighbors[receiverSumoId].insert(env.substr(p, e - p));
         }
     }
-
-    std::cout << "[gossip-rx] sumo_id=" << receiverSumoId
-              << " receiver_id=" << receiver_id
-              << " payload_bytes=" << payload.size()
-              << " → ZMQ PUSH 5561" << std::endl;
+    {
+      double now = Simulator::Now().GetSeconds();
+      bool time_trigger = (now - m_gossipLastLogTime[receiverSumoId]) >= 30.0;
+      if (m_gossipRxLog[receiverSumoId] % 100 == 0 || time_trigger)
+        {
+          char logbuf[256];
+          std::snprintf(logbuf, sizeof(logbuf),
+              "[gossip-summary-rx] sumo_id=%s total_tx=%u total_rx=%u neighbors=%zu",
+              receiverSumoId.c_str(),
+              m_gossipTxTotal.count(receiverSumoId) ? m_gossipTxTotal.at(receiverSumoId) : 0,
+              m_gossipRxTotal[receiverSumoId],
+              m_gossipNeighbors.count(receiverSumoId) ? m_gossipNeighbors.at(receiverSumoId).size() : 0);
+          GossipLog(logbuf);
+          m_gossipRxLog[receiverSumoId] = 0;
+          m_gossipLastLogTime[receiverSumoId] = now;
+        }
+    }
 
     static uint64_t gossip_drop_count = 0;
     int rc = zmq_send(m_zmq_gossip_out, out.c_str(), out.size(), ZMQ_DONTWAIT);
@@ -1039,6 +1122,37 @@ std::string TraciClient::GetStationId(Ptr<Node> node)
         gossip_drop_count++;
         std::cout << "[gossip-drop] out total=" << gossip_drop_count << std::endl;
       }
+  }
+
+  void
+  TraciClient::GossipLog(const std::string& msg)
+  {
+    std::lock_guard<std::mutex> lock(m_logMutex);
+    m_logQueue.push(msg);
+    m_logCv.notify_one();
+  }
+
+  void
+  TraciClient::LogThreadFn()
+  {
+    std::ofstream logfile("/tmp/gossip_ns3.log", std::ios::app);
+    uint32_t count = 0;
+    for (;;)
+      {
+        std::unique_lock<std::mutex> lock(m_logMutex);
+        m_logCv.wait(lock, [this]{ return !m_logQueue.empty() || !m_logRunning; });
+        while (!m_logQueue.empty())
+          {
+            std::string msg = std::move(m_logQueue.front());
+            m_logQueue.pop();
+            lock.unlock();
+            logfile << msg << '\n';
+            if (++count % 64 == 0) logfile.flush();
+            lock.lock();
+          }
+        if (!m_logRunning) break;
+      }
+    logfile.flush();
   }
 
 } // namespace ns3

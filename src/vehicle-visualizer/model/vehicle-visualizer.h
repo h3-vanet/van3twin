@@ -6,10 +6,17 @@
 #include <vector>
 #include <utility>
 #include <string>
+#include <cstdint>
 #define VIS_HEADING_INVALID 361
 #define DEFAULT_NODEJS_SERVER_PATH "./src/vehicle-visualizer/js/server.js"
 
 namespace ns3 {
+
+  struct VehiclePosEntry {
+    std::string id;
+    double lat, lng, heading;
+  };
+
   class vehicleVisualizer : public Object
   {
     public:
@@ -65,6 +72,10 @@ namespace ns3 {
       // Only call when tx or rx has changed since the last call (throttle in TraciClient).
       int sendGossipUpdate(const std::string& vehicleId,
                            uint32_t txCount, uint32_t rxCount, uint32_t neighborCount);
+
+      // Send all vehicle positions in a single UDP datagram (one batch per simulation step).
+      // Replaces repeated sendObjectUpdate() calls to reduce syscall count.
+      int sendBatchUpdate(const std::vector<VehiclePosEntry>& vehicles);
 
       // Send one experiment-state summary per simulation step.
       // Assignment/handover fields are 0 placeholders (those metrics live in Rust, not C++).

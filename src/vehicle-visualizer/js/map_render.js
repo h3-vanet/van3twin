@@ -52,6 +52,19 @@ const DEFAULT_COLOR = '#9e9e9e';
 socket.on('message', (msg) => {
 	if (msg == null) {
 		document.getElementById('statusid').innerHTML = '<p>Waiting for a connection from ms-van3t</p>';
+	} else if (msg.startsWith('{')) {
+		// JSON batch message path (batch_positions)
+		try {
+			const parsed = JSON.parse(msg);
+			if (parsed.type === 'batch_positions' && Array.isArray(parsed.vehicles)) {
+				parsed.vehicles.forEach(v => {
+					update_marker(leafletmap, v.id, v.lat, v.lng,
+						v.heading !== undefined ? v.heading : VIS_HEADING_INVALID);
+				});
+			}
+		} catch(e) {
+			console.warn("VehicleVisualizer: failed to parse JSON message:", e);
+		}
 	} else {
 		let msg_fields = msg.split(",");
 

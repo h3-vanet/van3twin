@@ -24,10 +24,15 @@
 #define TRACI_H
 
 #include <map>
+#include <unordered_map>
 #include <set>
 #include <vector>
 #include <string>
 #include <functional>
+#include <thread>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
 
 #include <signal.h>
 #include <stdlib.h>
@@ -167,15 +172,35 @@ private:
   void*  m_zmq_gossip_in  = nullptr;
   void*  m_zmq_gossip_out = nullptr;
   // Store Send callbacks as std::function to avoid pulling V2xGossipApp type into this header
-  std::map<std::string, std::function<void(const uint8_t*, uint32_t)>> m_gossipSend;
-  std::map<std::string, uint64_t>           m_sumo_to_u64;
+  std::unordered_map<std::string, std::function<void(const uint8_t*, uint32_t)>> m_gossipSend;
+  std::unordered_map<std::string, uint64_t>           m_sumo_to_u64;
 
   // Per-vehicle gossip metrics for visualizer (color coding, delivery ratio, neighbor count)
-  std::map<std::string, uint32_t>              m_gossipTxCount;
-  std::map<std::string, uint32_t>              m_gossipRxCount;
-  std::map<std::string, std::set<std::string>> m_gossipNeighbors;
-  std::map<std::string, uint32_t>              m_lastGossipTxSent;  // throttle: last sent value
-  std::map<std::string, uint32_t>              m_lastGossipRxSent;
+  std::unordered_map<std::string, uint32_t>              m_gossipTxCount;
+  std::unordered_map<std::string, uint32_t>              m_gossipRxCount;
+  std::unordered_map<std::string, std::set<std::string>> m_gossipNeighbors;
+  std::unordered_map<std::string, uint32_t>              m_lastGossipTxSent;
+  std::unordered_map<std::string, uint32_t>              m_lastGossipRxSent;
+
+  // Per-vehicle gossip summary logging (one log line per 100 msgs OR 30s sim-time per vehicle)
+  std::unordered_map<std::string, uint32_t> m_gossipTxLog;
+  std::unordered_map<std::string, uint32_t> m_gossipRxLog;
+  std::unordered_map<std::string, uint32_t> m_gossipTxTotal;
+  std::unordered_map<std::string, uint32_t> m_gossipRxTotal;
+  std::unordered_map<std::string, double>   m_gossipLastLogTime;
+
+  // Async gossip logger — background thread writes to /tmp/gossip_ns3.log
+  std::queue<std::string>  m_logQueue;
+  std::mutex               m_logMutex;
+  std::condition_variable  m_logCv;
+  std::thread              m_logThread;
+  bool                     m_logRunning = false;
+  void   GossipLog(const std::string& msg);
+  void   LogThreadFn();
+
+  // Visualizer rate limit
+  double m_lastVisUpdateTime = -1.0;
+
   void   ProcessGossipIn();
   void   OnGossipReceived(const std::string& receiverSumoId,
                           const uint8_t* data, uint32_t len);

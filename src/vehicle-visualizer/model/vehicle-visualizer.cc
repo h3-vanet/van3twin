@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <sstream>
+#include <cstdio>
 #include "vehicle-visualizer.h"
 
 namespace ns3 {
@@ -322,6 +323,26 @@ namespace ns3 {
       int ret = send(m_sockfd, buf, msg.length() + 1, 0);
       delete[] buf;
       return ret;
+  }
+
+  int
+  vehicleVisualizer::sendBatchUpdate(const std::vector<VehiclePosEntry>& vehicles)
+  {
+      if (!m_is_connected || !m_is_map_sent || vehicles.empty()) return 0;
+
+      std::string msg;
+      msg.reserve(vehicles.size() * 80 + 40);
+      msg = "{\"type\":\"batch_positions\",\"vehicles\":[";
+      char buf[160];
+      for (std::size_t i = 0; i < vehicles.size(); ++i) {
+          if (i > 0) msg += ',';
+          std::snprintf(buf, sizeof(buf),
+              "{\"id\":\"%s\",\"lat\":%.7f,\"lng\":%.7f,\"heading\":%.2f}",
+              vehicles[i].id.c_str(), vehicles[i].lat, vehicles[i].lng, vehicles[i].heading);
+          msg += buf;
+      }
+      msg += "]}";
+      return send(m_sockfd, msg.c_str(), msg.size() + 1, 0);
   }
 
   std::vector<std::pair<double,double>>
