@@ -263,6 +263,9 @@ if [ "$VERSION" == "24.04" ]; then
     find src -type f -not -path "*/proto/*" -exec sed -i 's/\bTYPE_STRING\b/TRACI_TYPE_STRING/g' {} +
     find src -type f -not -path "*/proto/*" -exec sed -i 's/\bTYPE_FLOAT\b/TRACI_TYPE_FLOAT/g' {} +
     find src -type f -not -path "*/proto/*" -exec sed -i 's/\bTYPE_BOOL\b/TRACI_TYPE_BOOL/g' {} +
+	sed -i 's/#include <vector>/#include <vector>\n#include <cstdint>/' ./src/wifi/model/block-ack-type.h
+	sed -i 's/#include <vector>/#include <vector>\n#include <cstdint>/' ./src/network/utils/bit-serializer.h
+	sed -i 's/#include <vector>/#include <vector>\n#include <cstdint>/' ./src/network/utils/bit-deserializer.h
 elif [ "$VERSION" == "22.04" ]; then
     echo "You are using Ubuntu 22.04 (Jammy Jellyfish)."
 elif [ "$VERSION" == "20.04" ]; then

@@ -239,10 +239,6 @@ if [ "$mode" = "base" ]; then
 	sed -i '/build_lib_example(/ { :a; N; /\n)/!ba; /NAME v2v-80211p-gps-tc-dcc/ { s/^/#/; s/\n/\n#/g } }' ./src/automotive/examples/CMakeLists.txt
 	sed -i '/build_lib_example(/ { :a; N; /\n)/!ba; /NAME v2v-80211p-gps-tc-example/ { s/^/#/; s/\n/\n#/g } }' ./src/automotive/examples/CMakeLists.txt
 
-	sed -i 's/#include <vector>/#include <vector>\n#include <cstdint>/' ./src/wifi/model/block-ack-type.h
-	sed -i 's/#include <vector>/#include <vector>\n#include <cstdint>/' ./src/network/utils/bit-serializer.h
-	sed -i 's/#include <vector>/#include <vector>\n#include <cstdint>/' ./src/network/utils/bit-deserializer.h
-
 	python3.7 adapt_files.py CARLA
 fi
 
