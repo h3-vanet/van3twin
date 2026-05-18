@@ -235,28 +235,20 @@ if [ "$mode" = "base" ]; then
 	        esac
 	fi
 
-	#cd "$ns_3_dir"
-	#echo "Parching files in $ns_3_dir..."
-	#if [ ! -f "./src/automotive/examples/CMakeLists.txt" ]; then
-    	#	echo "Error! CMakeLists.txt does not exists! This is a bug. Please report it to the developers."
-	#	exit 1
-	#fi
-	#sed -i '/build_lib_example(/ { :a; N; /\n)/!ba; /NAME v2x-emulator/ { s/^/#/; s/\n/\n#/g } }' ./src/automotive/examples/CMakeLists.txt
-	#sed -i '/build_lib_example(/ { :a; N; /\n)/!ba; /NAME v2v-80211p-gps-tc-dcc/ { s/^/#/; s/\n/\n#/g } }' ./src/automotive/examples/CMakeLists.txt
-	#sed -i '/build_lib_example(/ { :a; N; /\n)/!ba; /NAME v2v-80211p-gps-tc-example/ { s/^/#/; s/\n/\n#/g } }' ./src/automotive/examples/CMakeLists.txt
-
 	python3.7 adapt_files.py CARLA
+
+	# Re-configure
+	./ns3 configure --build-profile=optimized --enable-examples --enable-tests --disable-python --disable-werror
 fi
 
 if [ "$mode" = "CARLA" ]; then
 	read -p "Current mode is 'CARLA', do you wish to switch to base ms-van3t? (WARNING: CARLA-OpenCDA capabilities are disabled in this mode)."
 
-	#sed -i '/^#build_lib_example(/{:a; N; /\n#)/!ba; /NAME v2x-emulator/{s/\n#/\n/g; s/^#//}}' ./src/automotive/examples/CMakeLists.txt
-	#sed -i '/^#build_lib_example(/{:a; N; /\n#)/!ba; /NAME v2v-80211p-gps-tc-dcc/{s/\n#/\n/g; s/^#//}}' ./src/automotive/examples/CMakeLists.txt
-	#sed -i '/^#build_lib_example(/{:a; N; /\n#)/!ba; /NAME v2v-80211p-gps-tc-example/{s/\n#/\n/g; s/^#//}}' ./src/automotive/examples/CMakeLists.txt
-
 	# Switch back to 'base'
 	python3.7 adapt_files.py BASE
+
+	# Re-configure
+	./ns3 configure --build-profile=optimized --enable-examples --enable-tests --disable-python --disable-werror
 fi
 
 
