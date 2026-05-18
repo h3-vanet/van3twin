@@ -235,6 +235,7 @@ if [ "$mode" = "base" ]; then
 	        esac
 	fi
 
+	cd "$ns_3_dir"
 	sed -i '/build_lib_example(/ { :a; N; /\n)/!ba; /NAME v2x-emulator/ { s/^/#/; s/\n/\n#/g } }' ./src/automotive/examples/CMakeLists.txt
 	sed -i '/build_lib_example(/ { :a; N; /\n)/!ba; /NAME v2v-80211p-gps-tc-dcc/ { s/^/#/; s/\n/\n#/g } }' ./src/automotive/examples/CMakeLists.txt
 	sed -i '/build_lib_example(/ { :a; N; /\n)/!ba; /NAME v2v-80211p-gps-tc-example/ { s/^/#/; s/\n/\n#/g } }' ./src/automotive/examples/CMakeLists.txt
