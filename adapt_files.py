@@ -310,7 +310,7 @@ def switch_to_base():
         os.remove("aux-files/current-mode.txt")
 
     with open("aux-files/current-mode.txt", 'w') as f:
-        f.write("BASE\n")
+        f.write("base\n")
 
     os.chdir(ns_3_dir)
     os.chdir("src/carla/proto/")
