@@ -302,9 +302,29 @@ def switch_to_base():
     remove_after_pattern(FILE, '${libcarla}')
     """
     
+    sections_to_comment = [
+        'v2x-emulator',
+        'v2v-80211p-gps-tc-example',
+        'v2v-80211p-gps-tc-dcc',
+        'v2v-simple-cam-exchange-80211p'
+    ]
+	
+    os.chdir('src/automotive/')
+
+    uncomment_sections(FILE2, sections_to_comment)
+
+    comment_section_examples(FILE2)
+
+    # delete_header_if_present(FILE, header_content)
+
+    remove_after_pattern(FILE, '${libcarla}')
+
+    os.chdir(ns_3_dir)
     subprocess.run(["rm", "-rf", "src/"])
     subprocess.run(["mv", "src-backup/src", "src"])
     subprocess.run(["rm", "-rf", "src-backup/"])
+    
+    os.chdir('src/automotive/')
 
     if os.path.exists("aux-files/current-mode.txt"):
         os.remove("aux-files/current-mode.txt")
