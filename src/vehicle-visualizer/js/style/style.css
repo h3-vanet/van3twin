@@ -9,7 +9,7 @@ html, body, #mapid {
 }
 
 #stats-panel {
-  position: fixed; top: 10px; right: 10px; z-index: 1000;
+  position: fixed; top: 10px; right: 10px; z-index: 9999;
   background: rgba(20,20,20,0.85); color: #eee;
   padding: 10px 14px; border-radius: 8px;
   font-family: monospace; font-size: 13px; min-width: 165px;
@@ -17,7 +17,7 @@ html, body, #mapid {
 }
 
 #experiment-panel {
-  position: fixed; top: 10px; left: 50px; z-index: 1000;
+  position: fixed; top: 10px; left: 50px; z-index: 9999;
   background: rgba(20,20,20,0.85); color: #eee;
   padding: 10px 14px; border-radius: 8px;
   font-family: monospace; font-size: 13px; min-width: 165px;
