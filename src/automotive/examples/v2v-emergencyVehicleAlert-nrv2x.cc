@@ -779,23 +779,12 @@ main (int argc, char *argv[])
                       auto coords = vehicleVisualizer::parseSumoShape (
                           reinterpret_cast<const char *>(xshape));
 
-                      // SUMO .add.xml shapes are always in network XY coordinates.
-                      // Always convert every vertex via TraCI so Leaflet places them
-                      // at the correct geographic position on the map.
-                      // A range-based heuristic was tried previously but failed: SUMO XY
-                      // values can be small (e.g. 8.9, 0.28) and fall inside the valid
-                      // lon/lat range, yet they are local network coordinates, not
-                      // global geographic ones.
-                      for (auto &p : coords)
-                        {
-                          libsumo::TraCIPosition geo =
-                              sumoClient->simulation.convertXYtoLonLat (p.first, p.second);
-                          p.first  = geo.x;  // longitude
-                          p.second = geo.y;  // latitude
-                        }
-
+                      // The parking polygon generator outputs shapes in geographic (lon,lat)
+                      // format — no TraCI conversion needed here.
+                      // parseSumoShape() already stores pairs as (lon, lat) which is what
+                      // sendPolygonUpdate() and the JS client expect.
                       if (poly_count == 0 && !coords.empty ())
-                        std::cout << "[poly] first vertex after XY→geo: lon=" << coords[0].first
+                        std::cout << "[poly] first vertex: lon=" << coords[0].first
                                   << " lat=" << coords[0].second << std::endl;
 
                       vehicleVis->sendPolygonUpdate (
