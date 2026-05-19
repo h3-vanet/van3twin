@@ -1,7 +1,6 @@
 """
 Generatore slot parcheggio sintetici da map.net.xml SUMO.
-Output: file .add.xml con elementi <poly> (rettangoli orientati) leggibili dal
-vehicle-visualizer C++ e da SUMO stesso come overlay grafico.
+Salva il bearing di ogni slot per visualizzazione come rettangoli orientati.
 """
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
@@ -130,54 +129,23 @@ def generate_slots(lanes):
     return slots
 
 
-def slot_corners(lat, lon, bearing, length, width):
-    """Compute the 4 corners of a parking rectangle.
-    bearing: degrees clockwise from North (standard geographic bearing).
-    Returns list of (lon, lat) pairs — SUMO shape format (lon first)."""
-    R    = 6371000.0
-    brg  = math.radians(bearing)
-    perp = brg + math.pi / 2.0   # perpendicular direction (right of travel)
-    hl   = length / 2.0
-    hw   = width  / 2.0
-    cos_lat = math.cos(math.radians(lat))
-
-    def offset_latlon(along_m, across_m):
-        # Decompose into north/east displacements
-        north_m = along_m * math.cos(brg)  + across_m * math.cos(perp)
-        east_m  = along_m * math.sin(brg)  + across_m * math.sin(perp)
-        return (lat + math.degrees(north_m / R),
-                lon + math.degrees(east_m  / (R * cos_lat)))
-
-    # Four corners in order: back-left → front-left → front-right → back-right
-    corners_latlon = [
-        offset_latlon(-hl, -hw),
-        offset_latlon(+hl, -hw),
-        offset_latlon(+hl, +hw),
-        offset_latlon(-hl, +hw),
-    ]
-    # Convert to (lon, lat) for SUMO shape attribute
-    return [(c[1], c[0]) for c in corners_latlon]
-
-
 def export_xml(slots, output_path):
-    """Write slots as <poly> elements so the C++ vehicle-visualizer and SUMO
-    can both display them as oriented rectangles."""
     additional = ET.Element("additional")
     for s in slots:
-        corners   = slot_corners(s["lat"], s["lon"], s["bearing"],
-                                 s["length"], s["width"])
-        # SUMO shape format: "lon1,lat1 lon2,lat2 ..."
-        shape_str = " ".join(f"{clon:.7f},{clat:.7f}" for clon, clat in corners)
-        ET.SubElement(additional, "poly", {
-            "id":    s["id"],
-            "color": "255,165,0,200",   # orange, semi-transparent
-            "shape": shape_str,
-            "type":  "parkingSlot",
-            "layer": "1",
+        ET.SubElement(additional, "parkingArea", {
+            "id":              s["id"],
+            "lane":            s["lane"],
+            "startPos":        f"{s['start_pos']:.2f}",
+            "endPos":          f"{s['end_pos']:.2f}",
+            "roadsideCapacity": "1",
+            "angle":           "0",
+            "length":          str(s["length"]),
+            "width":           str(s["width"]),
+            "lat":             f"{s['lat']:.7f}",
+            "lon":             f"{s['lon']:.7f}",
+            "bearing":         f"{s['bearing']:.1f}",
         })
-
-    raw  = ET.tostring(additional, encoding="utf-8")
-    xmlstr = minidom.parseString(raw).toprettyxml(indent="    ")
+    xmlstr = minidom.parseString(ET.tostring(additional, encoding="utf-8")).toprettyxml(indent="    ")
     lines = [l for l in xmlstr.split("\n") if l.strip()]
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
