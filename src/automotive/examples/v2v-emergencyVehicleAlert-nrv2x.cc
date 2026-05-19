@@ -758,9 +758,6 @@ main (int argc, char *argv[])
               return;
             }
           int poly_count = 0;
-          // Detected once from the first polygon: true = SUMO XY meters, false = lon/lat
-          bool needs_xy_conversion = false;
-          bool coord_format_detected = false;
 
           xmlNodePtr root = xmlDocGetRootElement (doc);
           for (xmlNodePtr n = root->children; n != nullptr; n = n->next)
@@ -782,32 +779,24 @@ main (int argc, char *argv[])
                       auto coords = vehicleVisualizer::parseSumoShape (
                           reinterpret_cast<const char *>(xshape));
 
-                      // Detect coordinate system once from the first polygon.
-                      // Geographic lon/lat: lon in [-180,180], lat in [-90,90].
-                      // SUMO network XY: values in meters, typically >> 180 or < -180.
-                      if (!coord_format_detected && !coords.empty ())
+                      // SUMO .add.xml shapes are always in network XY coordinates.
+                      // Always convert every vertex via TraCI so Leaflet places them
+                      // at the correct geographic position on the map.
+                      // A range-based heuristic was tried previously but failed: SUMO XY
+                      // values can be small (e.g. 8.9, 0.28) and fall inside the valid
+                      // lon/lat range, yet they are local network coordinates, not
+                      // global geographic ones.
+                      for (auto &p : coords)
                         {
-                          needs_xy_conversion = (std::abs (coords[0].first)  > 180.0 ||
-                                                 std::abs (coords[0].second) >  90.0);
-                          std::cout << "[poly] coordinate format: "
-                                    << (needs_xy_conversion
-                                        ? "SUMO XY metres — converting to lon/lat via TraCI"
-                                        : "geographic lon/lat — no conversion needed")
-                                    << "  (first vertex: " << coords[0].first
-                                    << ", " << coords[0].second << ")" << std::endl;
-                          coord_format_detected = true;
+                          libsumo::TraCIPosition geo =
+                              sumoClient->simulation.convertXYtoLonLat (p.first, p.second);
+                          p.first  = geo.x;  // longitude
+                          p.second = geo.y;  // latitude
                         }
 
-                      if (needs_xy_conversion)
-                        {
-                          for (auto &p : coords)
-                            {
-                              libsumo::TraCIPosition geo =
-                                  sumoClient->simulation.convertXYtoLonLat (p.first, p.second);
-                              p.first  = geo.x;  // longitude
-                              p.second = geo.y;  // latitude
-                            }
-                        }
+                      if (poly_count == 0 && !coords.empty ())
+                        std::cout << "[poly] first vertex after XY→geo: lon=" << coords[0].first
+                                  << " lat=" << coords[0].second << std::endl;
 
                       vehicleVis->sendPolygonUpdate (
                           reinterpret_cast<const char *>(xid), cr, cg, cb, ca, coords);
