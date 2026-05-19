@@ -246,7 +246,8 @@ function update_polygon(mapref, id, colorStr, shapeStr)
 		markers[id].setStyle(style);
 	} else {
 		const poly = L.polygon(latlngs, style).addTo(mapref);
-		poly.bindPopup("ID: " + id);
+		// bindPopup does not work with Canvas renderer; use click event instead
+		poly.on('click', () => poly.bindPopup("ID: " + id).openPopup());
 		markers[id] = poly;
 	}
 }
@@ -347,10 +348,12 @@ function draw_map(lat,lon,mapbox_token) {
 	}
 
 	// Main map object creation (default layer: standardlayer, i.e. OpenStreetMap or Mapbox street view)
+	// preferCanvas: true — use Canvas renderer instead of SVG; required for 1000+ polygon overlays
 	var mymap = L.map('mapid', {
 		center: [lat, lon],
 		zoom: 17,
-		layers: standardlayer
+		layers: standardlayer,
+		preferCanvas: true
 	});
 
 	// Add all the layers to the map, adding a control button to dynamically change the current map layer, if more than one layer can be used
