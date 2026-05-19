@@ -342,7 +342,8 @@ namespace ns3 {
           msg += buf;
       }
       msg += "]}";
-      return send(m_sockfd, msg.c_str(), msg.size() + 1, 0);
+      // JSON is self-framing; send without null terminator so JSON.parse succeeds in the browser
+      return send(m_sockfd, msg.c_str(), msg.size(), 0);
   }
 
   std::vector<std::pair<double,double>>
