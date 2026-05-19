@@ -1052,7 +1052,11 @@ std::string TraciClient::GetStationId(Ptr<Node> node)
     auto it = m_sumo_to_u64.find(receiverSumoId);
     if (it == m_sumo_to_u64.end())
       {
-        std::cout << "[gossip-rx] DROP: no u64 mapping for sumo_id=" << receiverSumoId << std::endl;
+        // Log once per vehicle (not every packet) — repeated drops indicate Rust never called RegisterVehicleId
+        if (m_gossipRxTotal.find(receiverSumoId) == m_gossipRxTotal.end())
+          NS_LOG_WARN("TraciClient: gossip-rx DROP: no u64 mapping for sumo_id=" << receiverSumoId
+                      << " — Rust may not have called RegisterVehicleId for this vehicle");
+        m_gossipRxTotal[receiverSumoId]++;
         return;
       }
     uint64_t receiver_id = it->second;
