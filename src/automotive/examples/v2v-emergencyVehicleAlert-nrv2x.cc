@@ -35,6 +35,7 @@
 #include "ns3/log.h"
 #include "ns3/antenna-module.h"
 #include <iomanip>
+#include <unistd.h>
 #include "ns3/sumo_xml_parser.h"
 #include "ns3/vehicle-visualizer-module.h"
 #include "ns3/MetricSupervisor.h"
@@ -779,6 +780,10 @@ main (int argc, char *argv[])
                       vehicleVis->sendPolygonUpdate (
                           reinterpret_cast<const char *>(xid), cr, cg, cb, ca, coords);
                       ++poly_count;
+                      // Yield every 100 sends so the OS can drain the Node.js UDP receive buffer.
+                      // Without this, a burst of 9000+ datagrams saturates the ~212 KB default
+                      // socket buffer and most packets are silently dropped by the kernel.
+                      if (poly_count % 100 == 0) usleep (1000);
                     }
                   else
                     std::cout << "[poly] WARNING: bad color '" << xcolor

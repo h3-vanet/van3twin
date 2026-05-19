@@ -48,7 +48,6 @@ const http = require('http').Server(app);
 const dgram = require('dgram');
 const udpSocket = dgram.createSocket('udp4');
 
-// Bind the socket to the loopback address/interface
 udpSocket.bind({
     address: '127.0.0.1',
     port: 48110
@@ -57,9 +56,16 @@ udpSocket.bind({
 // This callback is called when the UDP socket starts "listening" for new packets
 udpSocket.on('listening', () => {
     const address = udpSocket.address();
-    var bindaddr = address.address;
-    var bindport = address.port;
-    console.log('VehicleVisualizer: UDP connection ready at %s:%s',bindaddr,bindport);
+    console.log('VehicleVisualizer: UDP connection ready at %s:%s', address.address, address.port);
+    // Enlarge receive buffer to handle startup bursts of thousands of polygon datagrams.
+    // Default OS buffer (~212 KB) is saturated by 9000+ rapid UDP sends; 8 MB gives headroom.
+    // Silently clamps to net.core.rmem_max if that sysctl is lower than requested.
+    try {
+        udpSocket.setRecvBufferSize(8 * 1024 * 1024);
+        console.log('VehicleVisualizer: UDP recv buffer =', udpSocket.getRecvBufferSize(), 'bytes');
+    } catch (e) {
+        console.warn('VehicleVisualizer: could not enlarge UDP recv buffer:', e.message);
+    }
 });
 
 // map draw message container
