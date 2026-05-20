@@ -198,7 +198,7 @@ namespace ns3
           }
         else if (type == "RemoveVehicle")
             {
-              try { this->TraCIAPI::vehicle.removeStop(vehicle_id); }
+              try { this->TraCIAPI::vehicle.remove(vehicle_id); }
               catch (...) {}
             }
       }
