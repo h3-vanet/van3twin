@@ -71,7 +71,7 @@ html, body, #mapid {
   margin-bottom: 2px;
 }
 
-canvas { display: block; max-width: 100%; }
+#stats-panel canvas { display: block; max-width: 100%; }
 
 #btn-reset-baseline {
   margin-top: 8px;
