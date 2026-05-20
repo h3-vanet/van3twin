@@ -141,8 +141,13 @@ function computeDerivedMetrics(simTimeSec) {
 }
 
 // Initialise Chart.js sparkline charts. Called once after the map is drawn.
+// If Chart.js hasn't finished loading yet (async), retries up to 20×500ms = 10s.
+var initChartsRetries = 0;
 function initCharts() {
-	if (typeof Chart === 'undefined') return;
+	if (typeof Chart === 'undefined') {
+		if (initChartsRetries++ < 20) setTimeout(initCharts, 500);
+		return;
+	}
 	if (chartConnected !== null) return;  // already initialised
 
 	const chartDefaults = {
