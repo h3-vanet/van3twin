@@ -119,6 +119,18 @@ namespace ns3 {
   }
 
   int
+  vehicleVisualizer::sendObjectRemove(const std::string& objID)
+  {
+      if (!m_is_connected) return -1;
+      std::string msg = "object_remove," + objID;
+      char* buf = new char[msg.length() + 1];
+      std::copy(msg.c_str(), msg.c_str() + msg.length() + 1, buf);
+      int ret = send(m_sockfd, buf, msg.length() + 1, 0);
+      delete[] buf;
+      return ret;
+  }
+
+  int
   vehicleVisualizer::sendObjectUpdate(std::string objID, double lat, double lon, double heading)
   {
       if(m_is_connected==false)

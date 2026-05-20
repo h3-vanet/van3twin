@@ -280,6 +280,19 @@ socket.on('message', (msg) => {
 				}
 				break;
 
+			// object_remove,<id> — vehicle exited SUMO, remove its marker
+			case 'object_remove': {
+				const id = msg_fields[1];
+				if (id && markers[id]) {
+					leafletmap.removeLayer(markers[id]);
+					delete markers[id];
+					delete markersicons[id];
+				}
+				if (id) delete vehicleGossip[id];
+				updateStatsPanel();
+				break;
+			}
+
 			// gossip,<id>,<tx>,<rx>,<neighbors> — per-vehicle gossip metrics
 			case 'gossip': {
 				if (msg_fields.length < 5) { console.warn("VehicleVisualizer: malformed gossip message"); break; }

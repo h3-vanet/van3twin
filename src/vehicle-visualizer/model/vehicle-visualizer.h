@@ -73,6 +73,10 @@ namespace ns3 {
       int sendGossipUpdate(const std::string& vehicleId,
                            uint32_t txCount, uint32_t rxCount, uint32_t neighborCount);
 
+      // Notify the web visualizer to remove a vehicle marker from the map.
+      // Called when a vehicle exits SUMO so it doesn't stay as a ghost on the map.
+      int sendObjectRemove(const std::string& objID);
+
       // Send all vehicle positions in a single UDP datagram (one batch per simulation step).
       // Replaces repeated sendObjectUpdate() calls to reduce syscall count.
       int sendBatchUpdate(const std::vector<VehiclePosEntry>& vehicles);

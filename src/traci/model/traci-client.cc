@@ -182,8 +182,12 @@ namespace ns3
         if (type == "ChangeTarget")
           {
             std::string edge_id = getStr("edge_id");
-            try { this->TraCIAPI::vehicle.changeTarget(vehicle_id, edge_id); }
-            catch (...) {}
+            try {
+              this->TraCIAPI::vehicle.changeTarget(vehicle_id, edge_id);
+              std::cout << "[cmd] ChangeTarget vehicle=" << vehicle_id << " edge=" << edge_id << std::endl;
+            } catch (...) {
+              std::cout << "[cmd] ChangeTarget FAILED vehicle=" << vehicle_id << std::endl;
+            }
           }
         else if (type == "SetStop")
           {
@@ -193,8 +197,26 @@ namespace ns3
             size_t last_us  = lane_id.rfind('_');
             std::string edge = (last_us != std::string::npos) ? lane_id.substr(0, last_us) : lane_id;
             int lane_idx     = (last_us != std::string::npos) ? std::stoi(lane_id.substr(last_us + 1)) : 0;
-            try { this->TraCIAPI::vehicle.setStop(vehicle_id, edge, end_pos, lane_idx, duration); }
-            catch (...) {}
+            try {
+              this->TraCIAPI::vehicle.setStop(vehicle_id, edge, end_pos, lane_idx, duration);
+              std::cout << "[cmd] SetStop vehicle=" << vehicle_id << " edge=" << edge
+                        << " pos=" << end_pos << " dur=" << duration << "s" << std::endl;
+            } catch (...) {
+              std::cout << "[cmd] SetStop FAILED vehicle=" << vehicle_id << std::endl;
+            }
+          }
+        else if (type == "RemoveVehicle")
+          {
+            try {
+              this->TraCIAPI::vehicle.remove(vehicle_id, 2); // 2 = REMOVE_VAPORIZED
+              std::cout << "[cmd] RemoveVehicle vehicle=" << vehicle_id << std::endl;
+            } catch (...) {
+              std::cout << "[cmd] RemoveVehicle FAILED vehicle=" << vehicle_id << std::endl;
+            }
+          }
+        else
+          {
+            std::cout << "[cmd] WARN unknown type='" << type << "'" << std::endl;
           }
         else if (type == "RemoveVehicle")
             {
@@ -732,11 +754,20 @@ namespace ns3
                 // get corresponding ns3 node
                 Ptr<ns3::Node> exNode = m_NodeMap.at(veh).second;
 
+                // save u64 before erasing (needed for VehicleExited ZMQ notification to Rust)
+                uint64_t rustId = 0;
+                {
+                  auto u64it = m_sumo_to_u64.find(veh);
+                  if (u64it != m_sumo_to_u64.end()) rustId = u64it->second;
+                }
+
                 // call exclude function for this node
                 m_excludeNode(exNode,veh);
 
                 // unregister in map
                 m_NodeMap.erase(veh);
+
+                std::cout << "[vehicle] exited sumo_id=" << veh << std::endl;
 
                 // clean up all per-vehicle gossip state to prevent unbounded map growth
                 m_gossipSend.erase(veh);
@@ -752,12 +783,19 @@ namespace ns3
                 m_gossipRxTotal.erase(veh);
                 m_gossipLastLogTime.erase(veh);
 
+                // notify web visualizer to remove the marker
+                if (m_vehicle_visualizer != nullptr && m_vehicle_visualizer->isConnected())
+                  m_vehicle_visualizer->sendObjectRemove(veh);
+
+                // notify bridge/Rust with both IDs so the gossip engine CancellationToken can be triggered
                 if (m_zmq_pub != nullptr)
                   {
-                    char buf[128];
+                    char buf[192];
                     snprintf(buf, sizeof(buf),
-                        "{\"type\":\"VehicleExited\",\"vehicle_id\":\"%s\"}", veh.c_str());
+                        "{\"type\":\"VehicleExited\",\"sumo_id\":\"%s\",\"vehicle_id\":%llu}",
+                        veh.c_str(), (unsigned long long)rustId);
                     zmqPublish(buf);
+                    std::cout << "[vehicle] exited ZMQ sumo_id=" << veh << " u64=" << rustId << std::endl;
                   }
               }
             else // if it is not in the map, create a new ns3 node for it
@@ -769,6 +807,8 @@ namespace ns3
 
                 // register in the map (link vehicle to node!)
                 m_NodeMap.insert(std::pair<std::string, std::pair<StationType_t, Ptr<ns3::Node>>>(veh, inNode));
+
+                std::cout << "[vehicle] entered sumo_id=" << veh << std::endl;
 
                 if (m_zmq_pub != nullptr)
                   {
