@@ -605,19 +605,6 @@ function draw_map(lat,lon,mapbox_token) {
 		preferCanvas: true
 	});
 
-	// Attach the stats and experiment panels as native Leaflet controls so they are
-	// guaranteed to render above all map layers regardless of stacking context.
-	const _attachPanel = function(id, position) {
-		const el = document.getElementById(id);
-		if (!el) return;
-		L.Control.extend({
-			onAdd: function() { return el; },
-			onRemove: function() {}
-		})({ position: position }).addTo(mymap);
-	};
-	_attachPanel('stats-panel',      'topright');
-	_attachPanel('experiment-panel', 'topleft');
-
 	// Add all the layers to the map, adding a control button to dynamically change the current map layer, if more than one layer can be used
 	if (mapbox_token != null) {
 		let basemaps = {
