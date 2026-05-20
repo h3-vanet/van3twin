@@ -530,6 +530,10 @@ namespace ns3
     bool doVisBatch = (m_vehicle_visualizer != nullptr && m_vehicle_visualizer->isConnected());
     if (doVisBatch) visBatch.reserve(m_NodeMap.size());
 
+    // Accumulators for average speed (km/h) reported in sendExperimentUpdate
+    double speedSumMs = 0.0;
+    uint32_t speedCount = 0;
+
     try
       {
         // iterate over all nodes in the map
@@ -586,6 +590,10 @@ namespace ns3
                         lastTx = tx;
                         lastRx = rx;
                       }
+
+                    // Accumulate speed for avg computation (converted to km/h at end of loop)
+                    speedSumMs += this->TraCIAPI::vehicle.getSpeed(node_ID);
+                    speedCount++;
                   }
 
                 if (m_zmq_pub != nullptr)
@@ -611,11 +619,12 @@ namespace ns3
         // Send one experiment-state summary per sim step (assignment/handover are 0 placeholders — those metrics live in Rust)
         if (m_vehicle_visualizer != nullptr && m_vehicle_visualizer->isConnected())
           {
+            double avgSpeedKmh = (speedCount > 0) ? (speedSumMs / speedCount) * 3.6 : 0.0;
             m_vehicle_visualizer->sendExperimentUpdate(
                 "normal",
                 (uint32_t)m_gossipSend.size(),  // density proxy: vehicles with gossip app
                 1, 500,                          // neighbor_k, gossip_interval_ms (hardcoded)
-                0, 0, 0, 0, 0.0,               // placeholders — assignment/handover metrics from Rust
+                0, 0, 0, 0, avgSpeedKmh,        // placeholders for Rust metrics; avgSpeedKmh from TraCI
                 Simulator::Now().GetSeconds()); // ns-3 simulation clock
           }
       }

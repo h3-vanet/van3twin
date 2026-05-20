@@ -31,6 +31,37 @@ var vehicleGossip = {};
 // Map reference variable
 var leafletmap = null;
 
+// --- Scientific KPI state ---
+
+// Wall-clock and sim-time baseline for sim/real-time ratio
+var metricsWallStart = null;
+var metricsSimStart  = null;
+
+// First-reception convergence tracking: id → true when vehicle first receives gossip
+// convergenceSimTime is set once all known gossip-active vehicles have rx > 0
+var vehicleConverged    = {};
+var convergenceSimTime  = null;
+var convergenceLocked   = false;  // prevents overwriting once set
+
+// Current simulation time (seconds), updated on every 'experiment' message
+var currentSimTime = 0;
+
+// Rolling history for sparkline charts (last N_HISTORY data points)
+const N_HISTORY     = 30;
+var historyConnected  = [];
+var historyFanout     = [];
+var historyIsolation  = [];
+
+// Chart.js chart instances (null until initCharts() is called)
+var chartConnected  = null;
+var chartFanout     = null;
+var chartIsolation  = null;
+
+// Message-rate tracking across successive computeDerivedMetrics() calls
+var msgRateLastSimTime = null;
+var msgRateLastTotalTx = 0;
+
+
 // SVG DivIcon factory — replaces static triangle.png / circle.png.
 // Color reflects gossip state; leaflet.rotatedMarker.js still handles rotation via CSS transform.
 function makeVehicleIcon(color, hasHeading) {
@@ -46,6 +77,133 @@ function makeVehicleIcon(color, hasHeading) {
 }
 
 const DEFAULT_COLOR = '#9e9e9e';
+
+// Returns the CSS class string for color-coding a metric value.
+// higherIsBetter=true: green ≥ greenThresh, red < redThresh
+// higherIsBetter=false: green ≤ greenThresh, red > redThresh
+function metricClass(val, greenThresh, redThresh, higherIsBetter) {
+	if (val === null || val === undefined || isNaN(val)) return 'metric-val';
+	if (higherIsBetter) {
+		if (val >= greenThresh) return 'metric-val metric-green';
+		if (val < redThresh)   return 'metric-val metric-red';
+		return 'metric-val metric-yellow';
+	} else {
+		if (val <= greenThresh) return 'metric-val metric-green';
+		if (val > redThresh)   return 'metric-val metric-red';
+		return 'metric-val metric-yellow';
+	}
+}
+
+// Compute derived metrics from vehicleGossip and update the stats panel DOM.
+// Returns an object with {isolationRate, appDeliveryRatio, msgRate, simRealRatio}.
+function computeDerivedMetrics(simTimeSec) {
+	const vals     = Object.values(vehicleGossip);
+	const total    = vals.length;
+	const totalTx  = vals.reduce((s, v) => s + v.tx, 0);
+	const totalRx  = vals.reduce((s, v) => s + v.rx, 0);
+
+	// Isolation rate: vehicles actively transmitting but not yet receiving anything
+	const isolatedCount = vals.filter(v => v.tx > 0 && v.rx === 0).length;
+	const isolationRate = total > 0 ? (isolatedCount / total) * 100 : 0;
+
+	// App-level delivery ratio: proportion of expected broadcasts NOT received.
+	// Computed as 1 - totalRx / (totalTx × avgNeighbors).
+	// NOTE: this is application-layer DR, NOT radio PLR from the ns-3 NR-V2X PHY layer.
+	// True radio PLR requires per-link statistics from the NR-V2X MAC/PHY model.
+	const avgNeighbors = total > 0 ? vals.reduce((s, v) => s + v.neighbors, 0) / total : 0;
+	let appDeliveryRatio = null;
+	const denominator = totalTx * avgNeighbors;
+	if (denominator > 0) {
+		appDeliveryRatio = Math.max(0, 1 - totalRx / denominator);
+	}
+
+	// Message rate: simulated TX per simulated second (delta between calls)
+	let msgRate = null;
+	if (msgRateLastSimTime !== null && simTimeSec > msgRateLastSimTime) {
+		const deltaSim = simTimeSec - msgRateLastSimTime;
+		const deltaTx  = totalTx - msgRateLastTotalTx;
+		msgRate = deltaTx / deltaSim;
+	}
+	msgRateLastSimTime = simTimeSec;
+	msgRateLastTotalTx = totalTx;
+
+	// Sim/real-time ratio: how fast simulation is running vs wall clock
+	let simRealRatio = null;
+	if (metricsWallStart !== null && metricsSimStart !== null) {
+		const wallElapsed = (Date.now() - metricsWallStart) / 1000;
+		const simElapsed  = simTimeSec - metricsSimStart;
+		if (wallElapsed > 0.5) {
+			simRealRatio = simElapsed / wallElapsed;
+		}
+	}
+
+	return { isolationRate, appDeliveryRatio, msgRate, simRealRatio };
+}
+
+// Initialise Chart.js sparkline charts. Called once after the map is drawn.
+function initCharts() {
+	if (typeof Chart === 'undefined') return;
+	if (chartConnected !== null) return;  // already initialised
+
+	const chartDefaults = {
+		type: 'line',
+		options: {
+			animation: false,
+			responsive: false,
+			plugins: { legend: { display: false } },
+			scales: {
+				x: { display: false },
+				y: { display: true, min: 0, ticks: { color: '#888', font: { size: 9 }, maxTicksLimit: 3 } }
+			},
+			elements: { point: { radius: 0 }, line: { borderWidth: 1.5 } }
+		}
+	};
+
+	function makeDataset(color) {
+		return { data: [], borderColor: color, backgroundColor: color + '33', fill: true };
+	}
+
+	chartConnected = new Chart(document.getElementById('chart-connected'), {
+		...chartDefaults,
+		data: { labels: [], datasets: [makeDataset('#4caf50')] }
+	});
+	chartFanout = new Chart(document.getElementById('chart-fanout'), {
+		...chartDefaults,
+		data: { labels: [], datasets: [makeDataset('#4fc3f7')] }
+	});
+	chartIsolation = new Chart(document.getElementById('chart-isolation'), {
+		...chartDefaults,
+		data: { labels: [], datasets: [makeDataset('#f44336')] }
+	});
+}
+
+// Push a new data point to the rolling history ring buffers.
+function pushHistory(connected, fanout, isolation) {
+	historyConnected.push(connected);
+	historyFanout.push(fanout);
+	historyIsolation.push(isolation);
+	if (historyConnected.length  > N_HISTORY) historyConnected.shift();
+	if (historyFanout.length     > N_HISTORY) historyFanout.shift();
+	if (historyIsolation.length  > N_HISTORY) historyIsolation.shift();
+}
+
+// Refresh all Chart.js sparklines from the current history arrays.
+function updateCharts() {
+	if (!chartConnected) return;
+	const labels = historyConnected.map((_, i) => i);
+
+	chartConnected.data.labels           = labels;
+	chartConnected.data.datasets[0].data = historyConnected;
+	chartConnected.update('none');
+
+	chartFanout.data.labels           = labels;
+	chartFanout.data.datasets[0].data = historyFanout;
+	chartFanout.update('none');
+
+	chartIsolation.data.labels           = labels;
+	chartIsolation.data.datasets[0].data = historyIsolation;
+	chartIsolation.update('none');
+}
 
 
 // Receive the first message from the server
@@ -88,6 +246,7 @@ socket.on('message', (msg) => {
 						}
 						leafletmap = draw_map(parseFloat(msg_fields[1]), parseFloat(msg_fields[2]), mapbox_token);
 						map_rx = true;
+						initCharts();
 						// Flush polygons that arrived before the map was ready
 						console.log("[poly] map ready, flushing " + pendingPolygons.length + " buffered polygons");
 						pendingPolygons.forEach(p => update_polygon(leafletmap, p.id, p.color, p.shape));
@@ -128,9 +287,11 @@ socket.on('message', (msg) => {
 				const color = gossipColor(tx, rx);
 				if (id in markers && markers[id].setIcon) {
 					markers[id].setIcon(makeVehicleIcon(color, markersicons[id] === CAR_ICO_IDX));
-					const fanout = tx > 0 ? (rx / tx).toFixed(1) : '-';
+					// App DR per vehicle: rx/tx × 100 — application-layer delivery ratio,
+					// NOT radio PLR from ns-3 NR-V2X PHY layer
+					const appDr = tx > 0 ? Math.round(rx / tx * 100) : '-';
 					markers[id].setPopupContent(
-						`<b>${id}</b><br>TX rounds: ${tx} &nbsp; RX: ${rx}<br>Neighbors: ${nbr}<br>Avg Fanout: ${fanout} rx/tx`);
+						`<b>${id}</b><br>TX rounds: ${tx} &nbsp; RX: ${rx}<br>Neighbors: ${nbr}<br>App DR: ${appDr}%`);
 				}
 				if (tx > prev.tx && id in markers && markers[id].getLatLng)
 					showTxRing(leafletmap, markers[id].getLatLng().lat, markers[id].getLatLng().lng);
@@ -141,17 +302,27 @@ socket.on('message', (msg) => {
 			// experiment,<scenario>,<density>,<k>,<interval>,<assignments>,<won>,<double>,<handovers>,<speed>,<simtime_s>
 			case 'experiment': {
 				if (msg_fields.length < 10) break;
-				document.getElementById('exp-scenario').textContent    = msg_fields[1]  || '-';
-				document.getElementById('exp-density').textContent     = msg_fields[2]  || '-';
-				document.getElementById('exp-k').textContent           = msg_fields[3]  || '-';
-				document.getElementById('exp-interval').textContent    = msg_fields[4]  || '-';
-				document.getElementById('exp-assignments').textContent = msg_fields[5]  || '0';
-				document.getElementById('exp-won').textContent         = msg_fields[6]  || '0';
-				document.getElementById('exp-double').textContent      = msg_fields[7]  || '0';
-				document.getElementById('exp-handovers').textContent   = msg_fields[8]  || '0';
-				document.getElementById('exp-speed').textContent       = msg_fields[9]  || '-';
-				if (msg_fields[10] !== undefined)
-					document.getElementById('exp-simtime').textContent = formatSimTime(msg_fields[10]);
+
+				const simTimeSec = msg_fields[10] !== undefined ? parseFloat(msg_fields[10]) : NaN;
+				if (!isNaN(simTimeSec)) {
+					currentSimTime = simTimeSec;
+					// Initialise baseline on first experiment message (or after manual reset)
+					if (metricsWallStart === null) {
+						metricsWallStart = Date.now();
+						metricsSimStart  = simTimeSec;
+					}
+					document.getElementById('exp-simtime').textContent = formatSimTime(simTimeSec);
+				}
+
+				document.getElementById('exp-scenario').textContent = msg_fields[1] || '-';
+				document.getElementById('exp-density').textContent  = msg_fields[2] || '-';
+				document.getElementById('exp-k').textContent        = msg_fields[3] || '-';
+				document.getElementById('exp-interval').textContent = msg_fields[4] || '-';
+
+				const speed = parseFloat(msg_fields[9]);
+				document.getElementById('exp-speed').textContent = isNaN(speed) ? '-' : speed.toFixed(1);
+
+				updateStatsPanel();
 				break;
 			}
 
@@ -167,6 +338,99 @@ socket.on('message', (msg) => {
 		}
 	}
 });
+
+// Recompute and display aggregate gossip statistics in the stats panel
+function updateStatsPanel() {
+	const vals           = Object.values(vehicleGossip);
+	const totalTx        = vals.reduce((s, v) => s + v.tx, 0);
+	const totalRx        = vals.reduce((s, v) => s + v.rx, 0);
+	const vehiclesWithTx = vals.filter(v => v.tx > 0);
+	const connected      = vals.filter(v => v.rx > 0);
+	const connCount      = connected.length;
+	const connRatio      = vals.length > 0 ? Math.round(connCount / vals.length * 100) : 0;
+
+	// Avg fanout: mean of per-vehicle rx/tx ratios (avoids inflated aggregate rx/tx)
+	const avgFanout = vehiclesWithTx.length > 0
+		? vehiclesWithTx.reduce((s, v) => s + (v.rx / v.tx), 0) / vehiclesWithTx.length
+		: null;
+
+	// --- Convergence scan (first-reception metric) ---
+	// Records the sim time at which the last vehicle first receives any gossip message.
+	// NOTE: this measures first-reception, NOT CRDT state convergence (same distributed
+	// state on all nodes). True CRDT convergence would require comparing sender_clock
+	// fields — documented as limitation and future work.
+	if (!convergenceLocked) {
+		const gossipActive = vehiclesWithTx;
+		if (gossipActive.length > 0) {
+			gossipActive.forEach(v => {
+				const id = Object.keys(vehicleGossip).find(k => vehicleGossip[k] === v);
+				if (id && v.rx > 0 && !vehicleConverged[id]) {
+					vehicleConverged[id] = currentSimTime;
+				}
+			});
+			// Lock convergence when all gossip-active vehicles have received at least once
+			const allConverged = gossipActive.every(v => {
+				const id = Object.keys(vehicleGossip).find(k => vehicleGossip[k] === v);
+				return id && vehicleConverged[id] !== undefined;
+			});
+			if (allConverged && gossipActive.length >= 2) {
+				convergenceSimTime = Math.max(...Object.values(vehicleConverged));
+				convergenceLocked  = true;
+			}
+		}
+	}
+
+	// --- Derived metrics ---
+	const { isolationRate, appDeliveryRatio, msgRate, simRealRatio } =
+		computeDerivedMetrics(currentSimTime);
+
+	// --- Update DOM ---
+	document.getElementById('stat-vehicles').textContent      = vals.length;
+	document.getElementById('stat-gossip-active').textContent = vehiclesWithTx.length;
+	document.getElementById('stat-total-tx').textContent      = totalTx;
+	document.getElementById('stat-total-rx').textContent      = totalRx;
+
+	const fanoutEl = document.getElementById('stat-avg-fanout');
+	fanoutEl.textContent  = avgFanout !== null ? avgFanout.toFixed(1) : '-';
+	fanoutEl.className    = avgFanout !== null ? metricClass(avgFanout, 5.0, 2.0, true) : 'metric-val';
+
+	const connEl = document.getElementById('stat-connected-ratio');
+	connEl.textContent = connRatio + '%';
+	connEl.className   = metricClass(connRatio, 80, 50, true);
+
+	const isoEl = document.getElementById('stat-isolated-ratio');
+	isoEl.textContent = vals.length > 0 ? Math.round(isolationRate) + '%' : '-';
+	isoEl.className   = vals.length > 0 ? metricClass(isolationRate, 5, 20, false) : 'metric-val';
+
+	const drEl = document.getElementById('stat-app-dr');
+	if (appDeliveryRatio !== null) {
+		drEl.textContent = (appDeliveryRatio * 100).toFixed(1) + '%';
+		drEl.className   = metricClass(appDeliveryRatio, 0.05, 0.20, false);
+	} else {
+		drEl.textContent = '-';
+		drEl.className   = 'metric-val';
+	}
+
+	const rateEl = document.getElementById('stat-msg-rate');
+	rateEl.textContent = msgRate !== null ? msgRate.toFixed(1) : '-';
+
+	// Sim/real-time ratio
+	const simrealEl = document.getElementById('exp-simreal');
+	if (simrealEl) {
+		simrealEl.textContent = simRealRatio !== null ? simRealRatio.toFixed(2) : '-';
+	}
+
+	// Convergence (first-reception)
+	const convEl = document.getElementById('exp-convergence');
+	if (convEl) {
+		convEl.textContent = convergenceSimTime !== null ? formatSimTime(convergenceSimTime) : '-';
+	}
+
+	// --- Sparkline history ---
+	const fanoutVal = avgFanout !== null ? avgFanout : 0;
+	pushHistory(connRatio, fanoutVal, isolationRate);
+	updateCharts();
+}
 
 // This function is used to update the position (and heading/rotation) of a marker/moving object on the map
 function update_marker(mapref,id,lat,lon,heading)
@@ -277,26 +541,6 @@ function showTxRing(mapref, lat, lon) {
 	setTimeout(() => mapref.removeLayer(ring), 1500);
 }
 
-// Recompute and display aggregate gossip statistics in the stats panel
-function updateStatsPanel() {
-	const vals           = Object.values(vehicleGossip);
-	const totalTx        = vals.reduce((s, v) => s + v.tx, 0);
-	const totalRx        = vals.reduce((s, v) => s + v.rx, 0);
-	const vehiclesWithTx = vals.filter(v => v.tx > 0);
-	// Per-vehicle average delivery ratio: avoids >100% from broadcast fan-out
-	const avgFanout = vehiclesWithTx.length > 0
-		? (vehiclesWithTx.reduce((s, v) => s + (v.rx / v.tx), 0) / vehiclesWithTx.length).toFixed(1)
-		: '-';
-	const connected  = vals.filter(v => v.rx > 0).length;
-	const connRatio  = vals.length > 0 ? Math.round(connected / vals.length * 100) : 0;
-	document.getElementById('stat-vehicles').textContent        = vals.length;
-	document.getElementById('stat-gossip-active').textContent   = vehiclesWithTx.length;
-	document.getElementById('stat-total-tx').textContent        = totalTx;
-	document.getElementById('stat-total-rx').textContent        = totalRx;
-	document.getElementById('stat-delivery-ratio').textContent  = avgFanout !== '-' ? avgFanout + ' rx/tx' : '-';
-	document.getElementById('stat-connected-ratio').textContent = connRatio + '%';
-}
-
 // This function is used to draw the whole map at the beginning, on which vehicles will be placed
 // It expects as arguments the lat and lon value where the map should be centered
 function draw_map(lat,lon,mapbox_token) {
@@ -387,3 +631,10 @@ function draw_map(lat,lon,mapbox_token) {
 
 	return mymap;
 }
+
+// Reset baseline button: re-anchors the sim/real-time ratio to the current position.
+// Useful when the browser is opened mid-simulation (ratio starts from arbitrary point).
+document.getElementById('btn-reset-baseline').addEventListener('click', () => {
+	metricsWallStart = Date.now();
+	metricsSimStart  = currentSimTime;
+});
