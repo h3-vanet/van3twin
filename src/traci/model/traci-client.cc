@@ -196,6 +196,11 @@ namespace ns3
             try { this->TraCIAPI::vehicle.setStop(vehicle_id, edge, end_pos, lane_idx, duration); }
             catch (...) {}
           }
+        else if (type == "RemoveVehicle")
+            {
+              try { this->TraCIAPI::vehicle.removeStop(vehicle_id); }
+              catch (...) {}
+            }
       }
   }
 
