@@ -297,6 +297,9 @@ socket.on('message', (msg) => {
 			case 'gossip': {
 				if (msg_fields.length < 5) { console.warn("VehicleVisualizer: malformed gossip message"); break; }
 				const id  = msg_fields[1];
+				// Ignore stale gossip for vaporized vehicles (object_remove may have arrived
+				// before this buffered UDP packet but the gossip engine is still sending)
+				if (!(id in markers)) break;
 				const tx  = parseInt(msg_fields[2]);
 				const rx  = parseInt(msg_fields[3]);
 				const nbr = parseInt(msg_fields[4]);
