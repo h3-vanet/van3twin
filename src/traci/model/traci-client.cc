@@ -161,19 +161,29 @@ namespace ns3
         std::string msg(buf);
 
         auto getStr = [&](const std::string& key) -> std::string {
-          std::string search = "\"" + key + "\":\"";
-          size_t p = msg.find(search);
-          if (p == std::string::npos) return "";
-          p += search.size();
-          size_t e = msg.find('"', p);
-          return (e == std::string::npos) ? "" : msg.substr(p, e - p);
+          // Python json.dumps uses ": " (with space); handle both compact and spaced JSON
+          for (const std::string& sep : {std::string("\":\""), std::string("\": \"")}) {
+            std::string search = "\"" + key + sep;
+            size_t p = msg.find(search);
+            if (p != std::string::npos) {
+              p += search.size();
+              size_t e = msg.find('"', p);
+              return (e == std::string::npos) ? "" : msg.substr(p, e - p);
+            }
+          }
+          return "";
         };
         auto getNum = [&](const std::string& key) -> double {
-          std::string search = "\"" + key + "\":";
-          size_t p = msg.find(search);
-          if (p == std::string::npos) return 0.0;
-          p += search.size();
-          try { return std::stod(msg.substr(p)); } catch (...) { return 0.0; }
+          // Handle both "key":N and "key": N
+          for (const std::string& sep : {std::string("\":"), std::string("\": ")}) {
+            std::string search = "\"" + key + sep;
+            size_t p = msg.find(search);
+            if (p != std::string::npos) {
+              p += search.size();
+              try { return std::stod(msg.substr(p)); } catch (...) { return 0.0; }
+            }
+          }
+          return 0.0;
         };
 
         std::string type       = getStr("type");
