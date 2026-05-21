@@ -221,8 +221,55 @@ namespace ns3
               this->TraCIAPI::vehicle.remove(vehicle_id, 2); // 2 = REMOVE_VAPORIZED
               std::cout << "[cmd] RemoveVehicle vehicle=" << vehicle_id << std::endl;
             } catch (...) {
-              std::cout << "[cmd] RemoveVehicle FAILED vehicle=" << vehicle_id << std::endl;
+              // Vehicle already gone from SUMO (duplicate command or natural departure)
             }
+
+            // Vaporized vehicles do NOT appear in getArrivedIDList(), so
+            // SynchroniseNodeMap will never clean them up. Do it here immediately,
+            // whether vehicle.remove() succeeded or the vehicle was already gone.
+            auto mapIt = m_NodeMap.find(vehicle_id);
+            if (mapIt != m_NodeMap.end())
+              {
+                uint64_t rustId = 0;
+                {
+                  auto u64it = m_sumo_to_u64.find(vehicle_id);
+                  if (u64it != m_sumo_to_u64.end()) rustId = u64it->second;
+                }
+
+                Ptr<ns3::Node> exNode = mapIt->second.second;
+                m_excludeNode(exNode, vehicle_id);
+                m_NodeMap.erase(vehicle_id);
+
+                std::cout << "[vehicle] exited (vaporized) sumo_id=" << vehicle_id << std::endl;
+
+                m_gossipSend.erase(vehicle_id);
+                m_sumo_to_u64.erase(vehicle_id);
+                m_gossipTxCount.erase(vehicle_id);
+                m_gossipRxCount.erase(vehicle_id);
+                m_gossipNeighbors.erase(vehicle_id);
+                m_lastGossipTxSent.erase(vehicle_id);
+                m_lastGossipRxSent.erase(vehicle_id);
+                m_gossipTxLog.erase(vehicle_id);
+                m_gossipRxLog.erase(vehicle_id);
+                m_gossipTxTotal.erase(vehicle_id);
+                m_gossipRxTotal.erase(vehicle_id);
+                m_gossipLastLogTime.erase(vehicle_id);
+
+                if (m_vehicle_visualizer != nullptr && m_vehicle_visualizer->isConnected())
+                  m_vehicle_visualizer->sendObjectRemove(vehicle_id);
+
+                if (m_zmq_pub != nullptr)
+                  {
+                    char buf[192];
+                    snprintf(buf, sizeof(buf),
+                        "{\"type\":\"VehicleExited\",\"sumo_id\":\"%s\",\"vehicle_id\":%llu}",
+                        vehicle_id.c_str(), (unsigned long long)rustId);
+                    zmqPublish(buf);
+                    std::cout << "[vehicle] exited ZMQ sumo_id=" << vehicle_id
+                              << " u64=" << rustId << std::endl;
+                  }
+              }
+            // If not in m_NodeMap, already cleaned up — silently ignore duplicate
           }
         else
           {
