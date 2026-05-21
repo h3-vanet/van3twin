@@ -283,6 +283,7 @@ socket.on('message', (msg) => {
 			// object_remove,<id> — vehicle exited SUMO, remove its marker
 			case 'object_remove': {
 				const id = msg_fields[1];
+				console.log("[marker] REMOVE id=" + id + " exists=" + (id in markers));
 				if (id && markers[id]) {
 					leafletmap.removeLayer(markers[id]);
 					delete markers[id];
@@ -461,6 +462,7 @@ function update_marker(mapref,id,lat,lon,heading)
 	} else {
 		// If the object ID has never been seen before, create a new marker
 		if(!(id in markers)) {
+			console.log("[marker] CREATE id=" + id);
 			const hasHeading = heading < VIS_HEADING_INVALID;
 			const icon_idx   = hasHeading ? CAR_ICO_IDX : CIRCLE_ICO_IDX;
 			const newmarker  = L.marker([lat, lon], {icon: makeVehicleIcon(DEFAULT_COLOR, hasHeading)}).addTo(mapref);
