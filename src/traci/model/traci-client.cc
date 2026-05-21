@@ -218,11 +218,6 @@ namespace ns3
           {
             std::cout << "[cmd] WARN unknown type='" << type << "'" << std::endl;
           }
-        else if (type == "RemoveVehicle")
-            {
-              try { this->TraCIAPI::vehicle.remove(vehicle_id); }
-              catch (...) {}
-            }
       }
   }
 
