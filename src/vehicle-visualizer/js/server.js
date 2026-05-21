@@ -39,7 +39,7 @@ if(server_argv.length!=1) {
 // Create a new HTTP server with express.static
 const express = require('express');
 const app = express();
-app.use(express.static(path.join(__dirname, '/')));
+app.use(express.static(path.join(__dirname, '/'), { etag: false, maxAge: 0 }));
 
 const http = require('http').Server(app);
 
