@@ -25,6 +25,7 @@
 
 #include <map>
 #include <unordered_map>
+#include <unordered_set>
 #include <set>
 #include <vector>
 #include <string>
@@ -197,6 +198,9 @@ private:
   bool                     m_logRunning = false;
   void   GossipLog(const std::string& msg);
   void   LogThreadFn();
+
+  // Vehicles requested to be removed via RemoveVehicle command — drained by SynchroniseNodeMap
+  std::unordered_set<std::string> m_pendingRemoval;
 
   // Visualizer rate limit
   double m_lastVisUpdateTime = -1.0;

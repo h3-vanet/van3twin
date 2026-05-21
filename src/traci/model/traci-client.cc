@@ -217,59 +217,17 @@ namespace ns3
           }
         else if (type == "RemoveVehicle")
           {
-            try {
-              this->TraCIAPI::vehicle.remove(vehicle_id, 2); // 2 = REMOVE_VAPORIZED
-              std::cout << "[cmd] RemoveVehicle vehicle=" << vehicle_id << std::endl;
-            } catch (...) {
-              // Vehicle already gone from SUMO (duplicate command or natural departure)
-            }
-
-            // Vaporized vehicles do NOT appear in getArrivedIDList(), so
-            // SynchroniseNodeMap will never clean them up. Do it here immediately,
-            // whether vehicle.remove() succeeded or the vehicle was already gone.
-            auto mapIt = m_NodeMap.find(vehicle_id);
-            if (mapIt != m_NodeMap.end())
+            if (m_NodeMap.count(vehicle_id) && !m_pendingRemoval.count(vehicle_id))
               {
-                uint64_t rustId = 0;
-                {
-                  auto u64it = m_sumo_to_u64.find(vehicle_id);
-                  if (u64it != m_sumo_to_u64.end()) rustId = u64it->second;
+                try {
+                  this->TraCIAPI::vehicle.remove(vehicle_id, 2); // 2 = REMOVE_VAPORIZED
+                } catch (...) {
+                  // Already gone from SUMO — still mark pending so SynchroniseNodeMap cleans up
                 }
-
-                Ptr<ns3::Node> exNode = mapIt->second.second;
-                m_excludeNode(exNode, vehicle_id);
-                m_NodeMap.erase(vehicle_id);
-
-                std::cout << "[vehicle] exited (vaporized) sumo_id=" << vehicle_id << std::endl;
-
-                m_gossipSend.erase(vehicle_id);
-                m_sumo_to_u64.erase(vehicle_id);
-                m_gossipTxCount.erase(vehicle_id);
-                m_gossipRxCount.erase(vehicle_id);
-                m_gossipNeighbors.erase(vehicle_id);
-                m_lastGossipTxSent.erase(vehicle_id);
-                m_lastGossipRxSent.erase(vehicle_id);
-                m_gossipTxLog.erase(vehicle_id);
-                m_gossipRxLog.erase(vehicle_id);
-                m_gossipTxTotal.erase(vehicle_id);
-                m_gossipRxTotal.erase(vehicle_id);
-                m_gossipLastLogTime.erase(vehicle_id);
-
-                if (m_vehicle_visualizer != nullptr && m_vehicle_visualizer->isConnected())
-                  m_vehicle_visualizer->sendObjectRemove(vehicle_id);
-
-                if (m_zmq_pub != nullptr)
-                  {
-                    char buf[192];
-                    snprintf(buf, sizeof(buf),
-                        "{\"type\":\"VehicleExited\",\"sumo_id\":\"%s\",\"vehicle_id\":%llu}",
-                        vehicle_id.c_str(), (unsigned long long)rustId);
-                    zmqPublish(buf);
-                    std::cout << "[vehicle] exited ZMQ sumo_id=" << vehicle_id
-                              << " u64=" << rustId << std::endl;
-                  }
+                m_pendingRemoval.insert(vehicle_id);
+                std::cout << "[cmd] RemoveVehicle vehicle=" << vehicle_id << std::endl;
               }
-            // If not in m_NodeMap, already cleaned up — silently ignore duplicate
+            // Silently ignore duplicate or already-cleaned-up commands
           }
         else
           {
@@ -621,8 +579,10 @@ namespace ns3
             // get current vehicle/pedestrian from the map
             std::string node_ID(it->first);
 
-            try
-              {
+            // Skip vehicles pending removal — SynchroniseNodeMap will clean them up next step
+            if (m_pendingRemoval.count(node_ID)) continue;
+
+            {
             // get vehicle/pedestrian position from sumo
             libsumo::TraCIPosition pos;
             if(it->second.first == StationType_pedestrian)
@@ -687,13 +647,7 @@ namespace ns3
                     zmqPublish(buf);
                   }
               }
-              } // end per-vehicle try
-            catch (libsumo::TraCIException&)
-              {
-                // Vehicle was vaporized by RemoveVehicle between steps.
-                // SynchroniseNodeMap will clean m_NodeMap when SUMO reports it as arrived.
-                std::cout << "[traci] WARN " << node_ID << " not known to SUMO (vaporized), skipping step" << std::endl;
-              }
+            } // end per-vehicle block
           }
 
         // Flush batch position update — single UDP datagram for all vehicles this step
@@ -796,6 +750,51 @@ namespace ns3
 
     try
       {
+        // Drain vehicles requested for removal via RemoveVehicle command.
+        // Vaporized vehicles never appear in getArrivedIDList(), so we handle them here.
+        for (const std::string& veh : m_pendingRemoval)
+          {
+            auto mapIt = m_NodeMap.find(veh);
+            if (mapIt == m_NodeMap.end()) continue; // already cleaned up (e.g. natural arrival)
+
+            uint64_t rustId = 0;
+            { auto u64it = m_sumo_to_u64.find(veh);
+              if (u64it != m_sumo_to_u64.end()) rustId = u64it->second; }
+
+            Ptr<ns3::Node> exNode = mapIt->second.second;
+            m_excludeNode(exNode, veh);
+            m_NodeMap.erase(veh);
+
+            std::cout << "[vehicle] exited (removed) sumo_id=" << veh << std::endl;
+
+            m_gossipSend.erase(veh);
+            m_sumo_to_u64.erase(veh);
+            m_gossipTxCount.erase(veh);
+            m_gossipRxCount.erase(veh);
+            m_gossipNeighbors.erase(veh);
+            m_lastGossipTxSent.erase(veh);
+            m_lastGossipRxSent.erase(veh);
+            m_gossipTxLog.erase(veh);
+            m_gossipRxLog.erase(veh);
+            m_gossipTxTotal.erase(veh);
+            m_gossipRxTotal.erase(veh);
+            m_gossipLastLogTime.erase(veh);
+
+            if (m_vehicle_visualizer != nullptr && m_vehicle_visualizer->isConnected())
+              m_vehicle_visualizer->sendObjectRemove(veh);
+
+            if (m_zmq_pub != nullptr)
+              {
+                char buf[192];
+                snprintf(buf, sizeof(buf),
+                    "{\"type\":\"VehicleExited\",\"sumo_id\":\"%s\",\"vehicle_id\":%llu}",
+                    veh.c_str(), (unsigned long long)rustId);
+                zmqPublish(buf);
+                std::cout << "[vehicle] exited ZMQ sumo_id=" << veh << " u64=" << rustId << std::endl;
+              }
+          }
+        m_pendingRemoval.clear();
+
         // get departed and arrived sumo vehicles since last simulation step
         std::vector<std::string> sumoVehicles;
         GetSumoVehicles(sumoVehicles);
