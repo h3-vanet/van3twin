@@ -229,7 +229,7 @@ socket.on('message', (msg) => {
 			console.warn("VehicleVisualizer: failed to parse JSON message:", e);
 		}
 	} else {
-		let msg_fields = msg.split(",");
+		let msg_fields = msg.split(",").map(f => f.replace(/\0/g, ''));
 
 		switch (msg_fields[0]) {
 			// "map draw" message: "map,<lat>,<lon>,<mapbox token>"
