@@ -574,6 +574,8 @@ namespace ns3
             // get current vehicle/pedestrian from the map
             std::string node_ID(it->first);
 
+            try
+              {
             // get vehicle/pedestrian position from sumo
             libsumo::TraCIPosition pos;
             if(it->second.first == StationType_pedestrian)
@@ -596,7 +598,7 @@ namespace ns3
               Vector vel_for_sionna = Vector(speed * cos(angle_for_sionna), speed * sin(angle_for_sionna), 0.0);
               updateLocationInSionna(node_ID, pos_for_sionna, angle_for_sionna, vel_for_sionna);
             }
-            
+
             if (it->second.first != StationType_pedestrian)
               {
                 libsumo::TraCIPosition lonlat = this->TraCIAPI::simulation.convertXYtoLonLat (pos.x, pos.y);
@@ -637,6 +639,13 @@ namespace ns3
                         node_ID.c_str(), lonlat.y, lonlat.x, speed);
                     zmqPublish(buf);
                   }
+              }
+              } // end per-vehicle try
+            catch (libsumo::TraCIException&)
+              {
+                // Vehicle was vaporized by RemoveVehicle between steps.
+                // SynchroniseNodeMap will clean m_NodeMap when SUMO reports it as arrived.
+                std::cout << "[traci] WARN " << node_ID << " not known to SUMO (vaporized), skipping step" << std::endl;
               }
           }
 
