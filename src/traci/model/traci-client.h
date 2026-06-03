@@ -50,7 +50,15 @@
 
 #include "ns3/StationType.h"
 
+#ifdef HAVE_SIONNA
 #include "ns3/sionna-connection-handler.h"
+#else
+#include "ns3/vector.h"
+#include <string>
+namespace ns3 {
+inline void updateLocationInSionna (const std::string &, const Vector &, double, const Vector &) {}
+} // namespace ns3
+#endif
 
 // No include of v2x-gossip-app.h here — would create a circular link dependency
 // (automotive → traci → automotive). The full type is only needed in traci-client.cc.

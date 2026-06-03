@@ -1,0 +1,9 @@
+#!/bin/bash
+# Adds --no-build to "run" so the original ns3 script skips cmake entirely
+# and resolves the binary from .lock-ns3_linux_build.  All other subcommands
+# and flags (--gdb, --valgrind, --cwd, --command-template, …) pass through
+# to ns3.orig unchanged.
+if [ "${1:-}" = "run" ]; then
+    exec /build/ns-3-dev/ns3.orig run --no-build "${@:2}"
+fi
+exec /build/ns-3-dev/ns3.orig "$@"

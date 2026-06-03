@@ -599,11 +599,13 @@ namespace ns3
 
             if (m_sionna == true)
             {
+#ifdef HAVE_SIONNA
               Vector pos_for_sionna = Vector(pos.x, pos.y, m_altitude);
               double angle_for_sionna = this->TraCIAPI::vehicle.getAngle(node_ID);
               double speed = this->TraCIAPI::vehicle.getSpeed(node_ID);
               Vector vel_for_sionna = Vector(speed * cos(angle_for_sionna), speed * sin(angle_for_sionna), 0.0);
               updateLocationInSionna(node_ID, pos_for_sionna, angle_for_sionna, vel_for_sionna);
+#endif
             }
 
             if (it->second.first != StationType_pedestrian)

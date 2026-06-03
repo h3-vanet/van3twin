@@ -12,7 +12,9 @@
 #include "ns3/Getter.hpp"
 #include "ns3/LDM.h"
 #include "signalInfoUtils.h"
+#ifdef HAVE_FORESEE
 #include "ns3/trajectoryPrediction.h"
+#endif
 
 extern "C" {
   #include "ns3/MCM.h"

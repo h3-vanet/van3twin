@@ -9,7 +9,6 @@ if(OpenCV_FOUND)
 endif()
 
 Set(source_files
-        model/Foresee/trajectoryPrediction.cc
         model/LOS-NLOS/los_nlos.cc
         helper/areaSpeedAdvisorClient80211p-helper.cc
         helper/areaSpeedAdvisorServer80211p-helper.cc
@@ -18,8 +17,6 @@ Set(source_files
         helper/emergencyVehicleAlert-helper.cc
         helper/v2x-gossip-app-helper.cc
         helper/v2xEmulator-helper.cc
-        helper/simpleCAMSender-helper.cc
-        helper/simpleVAMSender-helper.cc
         helper/emergencyVehicleWarningServer80211p-helper.cc
         helper/emergencyVehicleWarningClient80211p-helper.cc
         helper/trafficManagerClient80211p-helper.cc
@@ -37,8 +34,6 @@ Set(source_files
         model/Applications/areaSpeedAdvisorServer80211p.cc
         model/Applications/areaSpeedAdvisorClientLTE.cc
         model/Applications/areaSpeedAdvisorServerLTE.cc
-        model/Applications/simpleCAMSender-gps-tc.cc
-        model/Applications/simpleVAMSender-gps-tc.cc
         model/Applications/trafficManagerClient80211p.cc
         model/Applications/trafficManagerServer80211p.cc
         model/Applications/trafficManagerClientLTE.cc
@@ -53,8 +48,6 @@ Set(source_files
         model/Facilities/ITSSReceivingTableEntry.cc
         model/Facilities/asn_utils.cc
         model/Facilities/vdpTraci.cc
-        model/Facilities/vdpGPSTraceClient.cc
-        model/Facilities/vrudpGPSTraceClient.cc
         model/Facilities/caBasicService.cc
         model/utilities/sumo_xml_parser.cc
         model/Applications/v2xEmulator.cc
@@ -77,7 +70,6 @@ Set(source_files
         model/Facilities/VRUdp.cc
         model/Facilities/VRUBasicService.cc
         model/Facilities/mcBasicService.cc
-        model/Foresee/foresee.cc
 
         model/BTP/btp.cc
         model/BTP/btpHeader.cc
@@ -1568,7 +1560,6 @@ Set(source_files
 )
 
 set(header_files
-        model/Foresee/trajectoryPrediction.h
         model/LOS-NLOS/los_nlos.h
         model/Measurements/MetricSupervisor.h
         helper/areaSpeedAdvisorClientLTE-helper.h
@@ -1578,9 +1569,8 @@ set(header_files
         helper/emergencyVehicleAlert-helper.h
         helper/v2x-gossip-app-helper.h
         helper/v2xEmulator-helper.h
-        helper/simpleCAMSender-helper.h
-        helper/simpleVAMSender-helper.h
         model/utilities/OpenCDAClient.h
+        model/utilities/carla-module.h
 
         # OpenCDA/CARLA headers - installed only when the carla module is present
         # helper/cooperativePerception-helper.h
@@ -1594,8 +1584,7 @@ set(header_files
         model/Applications/areaSpeedAdvisorClientLTE.h
         model/Applications/areaSpeedAdvisorServerLTE.h
         model/Applications/emergencyVehicleAlert.h
-        model/Applications/simpleCAMSender-gps-tc.h
-        model/Applications/simpleVAMSender-gps-tc.h
+
 
         model/Facilities/denBasicService.h
         model/Facilities/denData.h
@@ -1603,8 +1592,6 @@ set(header_files
         model/Facilities/ITSSOriginatingTableEntry.h
         model/Facilities/ITSSReceivingTableEntry.h
         model/Facilities/vdpTraci.h
-        model/Facilities/vdpGPSTraceClient.h
-        model/Facilities/vrudpGPSTraceClient.h
         model/Facilities/vdp.h
         model/Facilities/caBasicService.h
         model/utilities/sumo_xml_parser.h
@@ -1616,7 +1603,6 @@ set(header_files
         model/Applications/v2xEmulator.h
         model/utilities/csv-utils.h
         model/Facilities/mcBasicService.h
-        model/Foresee/foresee.h
 
         model/Facilities/signalInfoUtils.h
         model/Security/security.h
@@ -5870,20 +5856,16 @@ build_lib(
         LIBRARIES_TO_LINK
         ${OPENSSL_LIBRARIES}
         ${libcore}
-        ${libfd-net-device}
         ${libwifi}
         ${libapplications}
         ${libmobility}
         ${libconfig-store}
         ${libstats}
-        ${libgps-tc}
         ${libnr}
         ${libcv2x}
         ${libwave}
         ${libinternet}
         ${libvehicle-visualizer}
         ${libtraci}
-        ${libcarla}
-        ${libsionna}
         TEST_SOURCES ${test_sources}
 )
