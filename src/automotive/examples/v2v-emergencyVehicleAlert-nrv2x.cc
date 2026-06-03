@@ -17,10 +17,10 @@
  *
  */
 
-#include "ns3/carla-module.h"
 //#include "ns3/automotive-module.h"
 #include "ns3/emergencyVehicleAlert-helper.h"
 #include "ns3/emergencyVehicleAlert.h"
+#include "ns3/v2x-gossip-app-helper.h"
 #include "ns3/traci-module.h"
 #include "ns3/config-store.h"
 #include "ns3/network-module.h"
@@ -35,11 +35,13 @@
 #include "ns3/log.h"
 #include "ns3/antenna-module.h"
 #include <iomanip>
+#include <unistd.h>
 #include "ns3/sumo_xml_parser.h"
 #include "ns3/vehicle-visualizer-module.h"
 #include "ns3/MetricSupervisor.h"
 
-
+#include <libxml/parser.h>
+#include <libxml/tree.h>
 #include <unistd.h>
 #include "ns3/core-module.h"
 
@@ -99,6 +101,7 @@ main (int argc, char *argv[])
   std::string csv_name_cumulative;
   std::string sumo_netstate_file_name;
   bool vehicle_vis = false;
+  double sumo_wait_for_socket = 5.0; // seconds to wait for SUMO to open TraCI socket
 
   int numberOfNodes;
   uint32_t nodeCounter = 0;
@@ -155,6 +158,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("sumo-config", "Location and name of SUMO configuration file", sumo_config);
   cmd.AddValue ("csv-log", "Name of the CSV log file", csv_name);
   cmd.AddValue ("vehicle-visualizer", "Activate the web-based vehicle visualizer for ms-van3t", vehicle_vis);
+  cmd.AddValue ("sumo-wait", "Seconds to wait for SUMO to open TraCI socket", sumo_wait_for_socket);
   cmd.AddValue ("csv-log-cumulative", "Name of the CSV log file for the cumulative (average) PRR and latency data", csv_name_cumulative);
   cmd.AddValue ("netstate-dump-file", "Name of the SUMO netstate-dump file containing the vehicle-related information throughout the whole simulation", sumo_netstate_file_name);
   cmd.AddValue ("baseline", "Baseline for PRR calculation", m_baseline_prr);
@@ -650,7 +654,7 @@ main (int argc, char *argv[])
   }
 
   sumoClient->SetAttribute ("SumoAdditionalCmdOptions", StringValue (sumo_additional_options));
-  sumoClient->SetAttribute ("SumoWaitForSocket", TimeValue (Seconds (1.0)));
+  sumoClient->SetAttribute ("SumoWaitForSocket", TimeValue (Seconds (sumo_wait_for_socket)));
 
   /* Create and setup the web-based vehicle visualizer of ms-van3t */
   vehicleVisualizer vehicleVisObj;
@@ -693,11 +697,22 @@ main (int argc, char *argv[])
       EmergencyVehicleAlertHelper.SetAttribute ("IpAddr", Ipv4AddressValue(groupAddress4));
       i++;
 
+      // EVA disabled for clean gossip PLR measurements.
+      // Install() alone is not enough — ns-3 defaults start time to Seconds(0),
+      // so the app would run anyway. The NR-V2X bearer is activated globally
+      // before this lambda and does not depend on the EVA app being installed.
       //ApplicationContainer CAMSenderApp = CamSenderHelper.Install (includedNode);
-      ApplicationContainer AppSample = EmergencyVehicleAlertHelper.Install (includedNode);
+      //ApplicationContainer AppSample = EmergencyVehicleAlertHelper.Install (includedNode);
+      //AppSample.Start (Seconds (0.0));
+      //AppSample.Stop (Seconds(simTime) - Simulator::Now () - Seconds (0.1));
 
-      AppSample.Start (Seconds (0.0));
-      AppSample.Stop (Seconds(simTime) - Simulator::Now () - Seconds (0.1));
+      /* Install gossip relay application */
+      V2xGossipAppHelper gossipHelper;
+      gossipHelper.SetAttribute ("VehicleId", StringValue (vehicleID));
+      ApplicationContainer GossipApp = gossipHelper.Install (includedNode);
+      GossipApp.Start (Seconds (0.0));
+      GossipApp.Stop (Seconds(simTime) - Simulator::Now () - Seconds (0.1));
+      sumoClient->RegisterGossipApp (vehicleID, GossipApp.Get(0));
 
       return includedNode;
     };
@@ -720,6 +735,115 @@ main (int argc, char *argv[])
 
   /* start traci client with given function pointers */
   sumoClient->SumoSetup (setupNewWifiNode, shutdownWifiNode);
+
+  /* Send static polygon overlays (parking spots, H3 cells, ...) to the visualizer.
+   * SumoSetup() has already called sendMapDraw(), so sendPolygonUpdate() is safe to call.
+   * We read the <additional-files> list from the .sumo.cfg that was already provided,
+   * so no extra argument is needed — it just works automatically. */
+  if (vehicle_vis)
+    {
+      // Resolve the directory containing the .sumo.cfg to use as base for relative paths
+      std::string cfg_dir = sumo_config;
+      auto last_slash = cfg_dir.find_last_of ("/\\");
+      cfg_dir = (last_slash != std::string::npos) ? cfg_dir.substr (0, last_slash + 1) : "./";
+
+      // Helper: parse one .add.xml file and send every <poly> to the visualizer
+      auto send_polys_from_file = [&](const std::string &add_path)
+        {
+          std::cout << "[poly] parsing: " << add_path << std::endl;
+          xmlDocPtr doc = xmlParseFile (add_path.c_str ());
+          if (doc == nullptr)
+            {
+              std::cout << "[poly] ERROR: could not open/parse: " << add_path << std::endl;
+              return;
+            }
+          int poly_count = 0;
+
+          xmlNodePtr root = xmlDocGetRootElement (doc);
+          for (xmlNodePtr n = root->children; n != nullptr; n = n->next)
+            {
+              if (n->type != XML_ELEMENT_NODE) continue;
+              if (xmlStrcmp (n->name, BAD_CAST "poly") != 0) continue;
+
+              xmlChar *xid    = xmlGetProp (n, BAD_CAST "id");
+              xmlChar *xcolor = xmlGetProp (n, BAD_CAST "color");
+              xmlChar *xshape = xmlGetProp (n, BAD_CAST "shape");
+
+              if (xid && xcolor && xshape)
+                {
+                  uint8_t cr = 0, cg = 0, cb = 0, ca = 255;
+                  int nparsed = sscanf (reinterpret_cast<const char *>(xcolor),
+                                        "%hhu,%hhu,%hhu,%hhu", &cr, &cg, &cb, &ca);
+                  if (nparsed >= 3)
+                    {
+                      auto coords = vehicleVisualizer::parseSumoShape (
+                          reinterpret_cast<const char *>(xshape));
+
+                      // The parking polygon generator outputs shapes in geographic (lon,lat)
+                      // format — no TraCI conversion needed here.
+                      // parseSumoShape() already stores pairs as (lon, lat) which is what
+                      // sendPolygonUpdate() and the JS client expect.
+                      if (poly_count == 0 && !coords.empty ())
+                        std::cout << "[poly] first vertex: lon=" << coords[0].first
+                                  << " lat=" << coords[0].second << std::endl;
+
+                      vehicleVis->sendPolygonUpdate (
+                          reinterpret_cast<const char *>(xid), cr, cg, cb, ca, coords);
+                      ++poly_count;
+                      // Yield every 100 sends so the OS can drain the Node.js UDP receive buffer.
+                      if (poly_count % 100 == 0) usleep (1000);
+                    }
+                  else
+                    std::cout << "[poly] WARNING: bad color '" << xcolor
+                              << "' for poly '" << xid << "'" << std::endl;
+                }
+              if (xid)    xmlFree (xid);
+              if (xcolor) xmlFree (xcolor);
+              if (xshape) xmlFree (xshape);
+            }
+          std::cout << "[poly] sent " << poly_count << " polygons from " << add_path << std::endl;
+          xmlFreeDoc (doc);
+        };
+
+      // Open the .sumo.cfg and find <additional-files value="..."/>
+      std::cout << "[poly] reading sumo config: " << sumo_config << std::endl;
+      std::cout << "[poly] cfg_dir resolved to: " << cfg_dir << std::endl;
+      xmlDocPtr cfg_doc = xmlParseFile (sumo_config.c_str ());
+      if (cfg_doc != nullptr)
+        {
+          xmlNodePtr cfg_root = xmlDocGetRootElement (cfg_doc);
+          for (xmlNodePtr sect = cfg_root->children; sect != nullptr; sect = sect->next)
+            {
+              if (sect->type != XML_ELEMENT_NODE) continue;
+              if (xmlStrcmp (sect->name, BAD_CAST "input") != 0) continue;
+              for (xmlNodePtr field = sect->children; field != nullptr; field = field->next)
+                {
+                  if (field->type != XML_ELEMENT_NODE) continue;
+                  if (xmlStrcmp (field->name, BAD_CAST "additional-files") != 0) continue;
+                  xmlChar *xval = xmlGetProp (field, BAD_CAST "value");
+                  if (!xval) continue;
+
+                  // value may be a comma-separated list of files
+                  std::istringstream ss (reinterpret_cast<const char *>(xval));
+                  std::string token;
+                  while (std::getline (ss, token, ','))
+                    {
+                      // trim spaces
+                      token.erase (0, token.find_first_not_of (" \t"));
+                      token.erase (token.find_last_not_of (" \t") + 1);
+                      if (token.empty ()) continue;
+                      // resolve relative to the cfg directory
+                      std::string full = (token[0] == '/') ? token : cfg_dir + token;
+                      send_polys_from_file (full);
+                    }
+                  xmlFree (xval);
+                }
+            }
+          xmlFreeDoc (cfg_doc);
+        }
+      else
+        NS_LOG_WARN ("vehicle-visualizer: could not open sumo config to read additional-files: " << sumo_config);
+    }
 
   /*** 8. Start Simulation ***/
   Simulator::Stop (Seconds(simTime));

@@ -39,7 +39,7 @@ if(server_argv.length!=1) {
 // Create a new HTTP server with express.static
 const express = require('express');
 const app = express();
-app.use(express.static(path.join(__dirname, '/')));
+app.use(express.static(path.join(__dirname, '/'), { etag: false, maxAge: 0 }));
 
 const http = require('http').Server(app);
 
@@ -48,7 +48,6 @@ const http = require('http').Server(app);
 const dgram = require('dgram');
 const udpSocket = dgram.createSocket('udp4');
 
-// Bind the socket to the loopback address/interface
 udpSocket.bind({
     address: '127.0.0.1',
     port: 48110
@@ -57,17 +56,24 @@ udpSocket.bind({
 // This callback is called when the UDP socket starts "listening" for new packets
 udpSocket.on('listening', () => {
     const address = udpSocket.address();
-    var bindaddr = address.address;
-    var bindport = address.port;
-    console.log('VehicleVisualizer: UDP connection ready at %s:%s',bindaddr,bindport);
+    console.log('VehicleVisualizer: UDP connection ready at %s:%s', address.address, address.port);
+    // Enlarge receive buffer to handle startup bursts of thousands of polygon datagrams.
+    // Default OS buffer (~212 KB) is saturated by 9000+ rapid UDP sends; 8 MB gives headroom.
+    // Silently clamps to net.core.rmem_max if that sysctl is lower than requested.
+    try {
+        udpSocket.setRecvBufferSize(8 * 1024 * 1024);
+        console.log('VehicleVisualizer: UDP recv buffer =', udpSocket.getRecvBufferSize(), 'bytes');
+    } catch (e) {
+        console.warn('VehicleVisualizer: could not enlarge UDP recv buffer:', e.message);
+    }
 });
 
-// map draw message container -> this variable will contain a copy of the "map draw" message received by ms-van3t at the beginning
-// of the simulation/emulation session
-// It is needed, as, when a new client connects (and it can connect in any moment), the first message which should be sent
-// is the "map" one, to let it render the map centered at the proper coordinates
-// This message should indeed be received by the client before attempting to render any other moving object
+// map draw message container
 var mapmsg = null;
+
+// Static polygon overlay cache: id -> message string.
+// Replayed to every new browser client so they see polygons even if they connect late.
+var polygonCache = {};
 
 // This callback is the most important one, as it is called every time a new UDP packet is received from ms-van3t
 // As a new packet is received, its content is forwarded to the client (i.e. the browser) via socket.io
@@ -94,8 +100,14 @@ udpSocket.on('message', (msg,rinfo) => {
         console.log("VehicleVisualizer: The server received a terminate message. The execution will be terminated.");
         process.exit(0);
     } else {
-    // Otherwise, forward all the other messages to the client via socket.io
-        io.sockets.send(msg.toString());
+        const msgStr = msg.toString();
+        // Cache static polygon messages so late-connecting clients receive them
+        if (msg_fields[0] === "poly" && msg_fields.length === 4) {
+            polygonCache[msg_fields[1]] = msgStr;
+            console.log(`[poly] cached polygon id=${msg_fields[1]} (total cached: ${Object.keys(polygonCache).length})`);
+        }
+        // Forward all non-map, non-terminate messages to the client via socket.io
+        io.sockets.send(msgStr);
     }
 });
 
@@ -106,8 +118,11 @@ const io = require('socket.io')(http);
 io.on('connection', (socket) => {
     console.log('VehicleVisualizer: A user is connected to the web interface');
 
-    // As soon as a client connects, send the "map" message, in order to make it correctly render the base map
+    // As soon as a client connects, send the "map" message first, then replay all cached polygons
     io.sockets.send(mapmsg);
+    const cachedCount = Object.keys(polygonCache).length;
+    console.log(`[poly] replaying ${cachedCount} cached polygons to new client`);
+    Object.values(polygonCache).forEach(p => socket.send(p));
 
     // socket.io message callback (called every time a client sends something to the server - it should
     // never be called in this web application)

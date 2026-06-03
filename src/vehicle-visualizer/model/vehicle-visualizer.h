@@ -3,10 +3,20 @@
 #define VEHICLE_VISUALIZER_H
 
 #include "ns3/core-module.h"
+#include <vector>
+#include <utility>
+#include <string>
+#include <cstdint>
 #define VIS_HEADING_INVALID 361
 #define DEFAULT_NODEJS_SERVER_PATH "./src/vehicle-visualizer/js/server.js"
 
 namespace ns3 {
+
+  struct VehiclePosEntry {
+    std::string id;
+    double lat, lng, heading;
+  };
+
   class vehicleVisualizer : public Object
   {
     public:
@@ -50,6 +60,37 @@ namespace ns3 {
       // If no "heading" is specified, VIS_HEADING_INVALID (i.e. no heading available) will be sent to the server
       int sendObjectUpdate(std::string objID, double lat, double lon);
       int sendObjectUpdate(std::string objID, double lat, double lon, double heading);
+
+      // Send a polygon overlay (e.g. H3 cell or parking spot) to the visualizer.
+      // coords: (lon,lat) pairs as they come from SUMO/XML; JS client swaps to lat,lon for Leaflet.
+      // r,g,b,a: SUMO color components 0-255 (a=255 fully opaque).
+      int sendPolygonUpdate(const std::string& polyID,
+                            uint8_t r, uint8_t g, uint8_t b, uint8_t a,
+                            const std::vector<std::pair<double,double>>& coords);
+
+      // Send per-vehicle gossip metrics to the visualizer (color coding + popup info).
+      // Only call when tx or rx has changed since the last call (throttle in TraciClient).
+      int sendGossipUpdate(const std::string& vehicleId,
+                           uint32_t txCount, uint32_t rxCount, uint32_t neighborCount);
+
+      // Notify the web visualizer to remove a vehicle marker from the map.
+      // Called when a vehicle exits SUMO so it doesn't stay as a ghost on the map.
+      int sendObjectRemove(const std::string& objID);
+
+      // Send all vehicle positions in a single UDP datagram (one batch per simulation step).
+      // Replaces repeated sendObjectUpdate() calls to reduce syscall count.
+      int sendBatchUpdate(const std::vector<VehiclePosEntry>& vehicles);
+
+      // Send one experiment-state summary per simulation step.
+      // Assignment/handover fields are 0 placeholders (those metrics live in Rust, not C++).
+      int sendExperimentUpdate(const std::string& scenario, uint32_t density,
+                               uint32_t k, uint32_t intervalMs,
+                               uint32_t assignments, uint32_t won,
+                               uint32_t doubleBooking, uint32_t handovers,
+                               double avgSpeedKmh, double simTimeSec);
+
+      // Parse a SUMO shape attribute string ("lon,lat lon,lat ...") into (lon,lat) pairs.
+      static std::vector<std::pair<double,double>> parseSumoShape(const std::string& shapeAttr);
 
       // This function should be called to terminate the execution of the Node.js server
       // Normally, the user should not call it, as it is automatically called by the destructor of the vehicleVisualizer object

@@ -24,13 +24,21 @@
 #define TRACI_H
 
 #include <map>
+#include <unordered_map>
+#include <unordered_set>
+#include <set>
 #include <vector>
 #include <string>
 #include <functional>
+#include <thread>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
 
 #include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <zmq.h>
 
 #include "ns3/core-module.h"
 #include "ns3/mobility-module.h"
@@ -51,6 +59,10 @@ namespace ns3 {
 inline void updateLocationInSionna (const std::string &, const Vector &, double, const Vector &) {}
 } // namespace ns3
 #endif
+
+// No include of v2x-gossip-app.h here — would create a circular link dependency
+// (automotive → traci → automotive). The full type is only needed in traci-client.cc.
+// RegisterGossipApp accepts Ptr<Application> and casts internally.
 
 #define STARTUP_FCN std::function<Ptr<Node>(std::string,TraciClient::StationTypeTraCI_t)>
 #define SHUTDOWN_FCN std::function<void(Ptr<Node>,std::string)>
@@ -84,6 +96,9 @@ public:
   std::string GetVehicleId(Ptr<Node> node);
 
   uint32_t GetVehicleMapSize(); // size of vehicle map
+
+  void RegisterGossipApp(const std::string& vehicleId, Ptr<Application> app);
+  void RegisterVehicleId(const std::string& sumoId, uint64_t rustId);
 
   std::vector<std::string> getVehicleNodeMapIds(); // get all vehicle node ids
 
@@ -152,6 +167,55 @@ private:
   void terminateVehicleVisualizer (void);
 
   bool m_sionna = false;
+
+  // ZMQ PUSH socket — pushes vehicle events on tcp://*:5555 (buffered, avoids slow-joiner loss)
+  void*  m_zmq_context = nullptr;
+  void*  m_zmq_pub     = nullptr;
+  void   zmqPublish (const char* json);
+
+  // ZMQ PULL socket — receives vehicle commands from bridge on tcp://*:5558
+  void*  m_zmq_cmd     = nullptr;
+  void   ProcessCommands ();
+
+  // Gossip relay — ZMQ PULL 5560 (Rust→ns-3) / PUSH 5561 (ns-3→Rust)
+  void*  m_zmq_gossip_in  = nullptr;
+  void*  m_zmq_gossip_out = nullptr;
+  // Store Send callbacks as std::function to avoid pulling V2xGossipApp type into this header
+  std::unordered_map<std::string, std::function<void(const uint8_t*, uint32_t)>> m_gossipSend;
+  std::unordered_map<std::string, uint64_t>           m_sumo_to_u64;
+
+  // Per-vehicle gossip metrics for visualizer (color coding, delivery ratio, neighbor count)
+  std::unordered_map<std::string, uint32_t>              m_gossipTxCount;
+  std::unordered_map<std::string, uint32_t>              m_gossipRxCount;
+  std::unordered_map<std::string, std::set<std::string>> m_gossipNeighbors;
+  std::unordered_map<std::string, uint32_t>              m_lastGossipTxSent;
+  std::unordered_map<std::string, uint32_t>              m_lastGossipRxSent;
+
+  // Per-vehicle gossip summary logging (one log line per 100 msgs OR 30s sim-time per vehicle)
+  std::unordered_map<std::string, uint32_t> m_gossipTxLog;
+  std::unordered_map<std::string, uint32_t> m_gossipRxLog;
+  std::unordered_map<std::string, uint32_t> m_gossipTxTotal;
+  std::unordered_map<std::string, uint32_t> m_gossipRxTotal;
+  std::unordered_map<std::string, double>   m_gossipLastLogTime;
+
+  // Async gossip logger — background thread writes to /tmp/gossip_ns3.log
+  std::queue<std::string>  m_logQueue;
+  std::mutex               m_logMutex;
+  std::condition_variable  m_logCv;
+  std::thread              m_logThread;
+  bool                     m_logRunning = false;
+  void   GossipLog(const std::string& msg);
+  void   LogThreadFn();
+
+  // Vehicles requested to be removed via RemoveVehicle command — drained by SynchroniseNodeMap
+  std::unordered_set<std::string> m_pendingRemoval;
+
+  // Visualizer rate limit
+  double m_lastVisUpdateTime = -1.0;
+
+  void   ProcessGossipIn();
+  void   OnGossipReceived(const std::string& receiverSumoId,
+                          const uint8_t* data, uint32_t len);
 
 };
 

@@ -5,6 +5,8 @@
 #include <netinet/udp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <sstream>
+#include <cstdio>
 #include "vehicle-visualizer.h"
 
 namespace ns3 {
@@ -114,6 +116,18 @@ namespace ns3 {
       m_is_map_sent=true;
 
       return send_rval;
+  }
+
+  int
+  vehicleVisualizer::sendObjectRemove(const std::string& objID)
+  {
+      if (!m_is_connected) return -1;
+      std::string msg = "object_remove," + objID;
+      char* buf = new char[msg.length() + 1];
+      std::copy(msg.c_str(), msg.c_str() + msg.length() + 1, buf);
+      int ret = send(m_sockfd, buf, msg.length() + 1, 0);
+      delete[] buf;
+      return ret;
   }
 
   int
@@ -248,6 +262,118 @@ namespace ns3 {
       }
 
       return sockfd;
+  }
+
+  int
+  vehicleVisualizer::sendPolygonUpdate(const std::string& polyID,
+                                       uint8_t r, uint8_t g, uint8_t b, uint8_t a,
+                                       const std::vector<std::pair<double,double>>& coords)
+  {
+      if (!m_is_connected)
+          NS_FATAL_ERROR("Error: attempted to use a non-connected vehicle visualizer client.");
+      if (!m_is_map_sent)
+          NS_FATAL_ERROR("Error in vehicle visualizer client: sendPolygonUpdate called before sendMapDraw.");
+      if (coords.empty())
+          return 0;
+
+      // Wire format: poly,<id>,<r>;<g>;<b>;<a>,<lon1>:<lat1>:<lon2>:<lat2>:...
+      std::ostringstream oss;
+      oss << "poly," << polyID << ","
+          << static_cast<int>(r) << ";" << static_cast<int>(g) << ";"
+          << static_cast<int>(b) << ";" << static_cast<int>(a) << ",";
+
+      oss.precision(7);
+      for (std::size_t i = 0; i < coords.size(); ++i) {
+          if (i > 0) oss << ":";
+          oss << coords[i].first << ":" << coords[i].second; // lon:lat
+      }
+
+      std::string msg = oss.str();
+      char* buf = new char[msg.length() + 1];
+      std::copy(msg.c_str(), msg.c_str() + msg.length() + 1, buf);
+      int ret = send(m_sockfd, buf, msg.length() + 1, 0);
+      delete[] buf;
+      return ret;
+  }
+
+  int
+  vehicleVisualizer::sendGossipUpdate(const std::string& vehicleId,
+                                      uint32_t txCount, uint32_t rxCount,
+                                      uint32_t neighborCount)
+  {
+      if (!m_is_connected) return -1;
+
+      std::string msg = "gossip," + vehicleId + ","
+                      + std::to_string(txCount) + ","
+                      + std::to_string(rxCount) + ","
+                      + std::to_string(neighborCount);
+      char* buf = new char[msg.length() + 1];
+      std::copy(msg.c_str(), msg.c_str() + msg.length() + 1, buf);
+      int ret = send(m_sockfd, buf, msg.length() + 1, 0);
+      delete[] buf;
+      return ret;
+  }
+
+  int
+  vehicleVisualizer::sendExperimentUpdate(const std::string& scenario, uint32_t density,
+                                          uint32_t k, uint32_t intervalMs,
+                                          uint32_t assignments, uint32_t won,
+                                          uint32_t doubleBooking, uint32_t handovers,
+                                          double avgSpeedKmh, double simTimeSec)
+  {
+      if (!m_is_connected) return -1;
+
+      std::ostringstream oss;
+      oss.precision(1);
+      oss << "experiment," << scenario << ","
+          << density << "," << k << "," << intervalMs << ","
+          << assignments << "," << won << "," << doubleBooking << ","
+          << handovers << "," << std::fixed << avgSpeedKmh << "," << simTimeSec;
+      std::string msg = oss.str();
+      char* buf = new char[msg.length() + 1];
+      std::copy(msg.c_str(), msg.c_str() + msg.length() + 1, buf);
+      int ret = send(m_sockfd, buf, msg.length() + 1, 0);
+      delete[] buf;
+      return ret;
+  }
+
+  int
+  vehicleVisualizer::sendBatchUpdate(const std::vector<VehiclePosEntry>& vehicles)
+  {
+      if (!m_is_connected || !m_is_map_sent || vehicles.empty()) return 0;
+
+      std::string msg;
+      msg.reserve(vehicles.size() * 80 + 40);
+      msg = "{\"type\":\"batch_positions\",\"vehicles\":[";
+      char buf[160];
+      for (std::size_t i = 0; i < vehicles.size(); ++i) {
+          if (i > 0) msg += ',';
+          std::snprintf(buf, sizeof(buf),
+              "{\"id\":\"%s\",\"lat\":%.7f,\"lng\":%.7f,\"heading\":%.2f}",
+              vehicles[i].id.c_str(), vehicles[i].lat, vehicles[i].lng, vehicles[i].heading);
+          msg += buf;
+      }
+      msg += "]}";
+      // JSON is self-framing; send without null terminator so JSON.parse succeeds in the browser
+      return send(m_sockfd, msg.c_str(), msg.size(), 0);
+  }
+
+  std::vector<std::pair<double,double>>
+  vehicleVisualizer::parseSumoShape(const std::string& shapeAttr)
+  {
+      // SUMO shape attribute: "lon,lat lon,lat ..." (space-separated, comma within pair)
+      std::vector<std::pair<double,double>> out;
+      std::istringstream ss(shapeAttr);
+      std::string token;
+      while (std::getline(ss, token, ' ')) {
+          if (token.empty()) continue;
+          auto comma = token.find(',');
+          if (comma == std::string::npos) continue;
+          double lon = std::stod(token.substr(0, comma));
+          double lat = std::stod(token.substr(comma + 1));
+          out.emplace_back(lon, lat);
+      }
+      return out;
   }
 
   void
