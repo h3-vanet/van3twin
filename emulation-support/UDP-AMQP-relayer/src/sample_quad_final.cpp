@@ -132,7 +132,7 @@ namespace QuadKeys
 			quadKey << digit;
 		}
 
-		std::cout<<"sto inviando: "<<quadKey.str()<<std::endl;
+		std::cout<<"sending: "<<quadKey.str()<<std::endl;
 		return quadKey.str();
 	}
 

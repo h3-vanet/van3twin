@@ -1,0 +1,471 @@
+# Simulation Methodology
+
+## Overview
+
+This methodology describes the co-simulation environment used for the experimental evaluation. The platform couples SUMO (Simulation of Urban MObility) for vehicular traffic with ns-3 for wireless-channel emulation, connected in real time through the TraCI (Traffic Control Interface) protocol. The fork of VaN3Twin used here extends the baseline ms-van3t framework with a gossip-relay application, ZeroMQ (ZMQ) telemetry channels, and a web-based vehicle visualizer; these additions are described in Section F.
+
+All parameter values below are sourced directly from repository files. Each claim is followed by a `path:line` citation. Values that cannot be confirmed from the repository are explicitly marked **Assumption** or **[NOT IN REPO]**.
+
+---
+
+## A. Scenario and Map
+
+### A.1 Geographic Area
+
+The road network is defined in `src/automotive/examples/sumo_files_v2v_map/map.net.xml`. The file header records the geographic extent of the simulated area:
+
+```xml
+<location netOffset="-394175.96,-4989734.74"
+          convBoundary="-135.00,-100.00,185.00,-5.45"
+          origBoundary="7.655664,45.053168,7.678963,45.076295"
+          projParameter="+proj=utm +zone=32 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"/>
+```
+`src/automotive/examples/sumo_files_v2v_map/map.net.xml:42`
+
+The `origBoundary` field specifies the real-world bounding box as `lon_min, lat_min, lon_max, lat_max`:
+
+| Attribute | Value |
+|-----------|-------|
+| Longitude range | 7.655664 °E – 7.678963 °E |
+| Latitude range | 45.053168 °N – 45.076295 °N |
+| Projection | UTM Zone 32N, WGS84 ellipsoid |
+
+This places the simulated area in the **Turin metropolitan area, Italy**.
+
+The network was generated on 2020-04-20 by **Eclipse SUMO netedit version 1.5.0**:
+`src/automotive/examples/sumo_files_v2v_map/map.net.xml:3`
+
+### A.2 Road Network Topology
+
+The network consists of a rectangular circuit with **four directed edge pairs** (one per cardinal-direction segment). Each straight section (`ne_to_nw`) has a length of 250.00 m and two lanes, each 3.00 m wide, with a maximum speed of 30.00 km/h:
+`src/automotive/examples/sumo_files_v2v_map/map.net.xml:44-46`
+
+The curved corner segments (e.g., `ne_to_se`) are 127.77 m long and share the same lane width and speed limit:
+`src/automotive/examples/sumo_files_v2v_map/map.net.xml:48-50`
+
+Two **SUMO rerouters** (`rerouter_0` on edge `se_to_ne`, `rerouter_1` on edge `ne_to_se`) continuously redirect vehicles onto one of two circular routes with 100 % probability, ensuring vehicles circulate indefinitely for the full simulation duration (0–1,000,000 s rerouter horizon):
+`src/automotive/examples/sumo_files_v2v_map/rerouter.add.xml:6-16`
+
+The six pre-defined routes defined in `cars.rou.xml` (route IDs 0–5) each traverse the full rectangular circuit but start from a different edge, providing varied initial positions:
+`src/automotive/examples/sumo_files_v2v_map/cars.rou.xml:4-9`
+
+### A.3 Simulation Time and Step Length
+
+The SUMO scenario runs from second 0 to second 300 with a fixed time-step of 0.1 s:
+
+```xml
+<time>
+    <begin value="0"/>
+    <end value="300"/>
+    <step-length value="0.1"/>
+</time>
+```
+`src/automotive/examples/sumo_files_v2v_map/map.sumo.cfg:10-14`
+
+The ns-3 scenario is parametrised separately via a command-line argument `--simTime` (default 100.0 s):
+`src/automotive/examples/v2v-emergencyVehicleAlert-nrv2x.cc:117`
+
+When run through the Docker entrypoint, `SIM_TIME` defaults to 300 s, aligning the ns-3 duration with the SUMO configuration:
+`entrypoint.sh:20`
+
+---
+
+## B. Traffic Model
+
+### B.1 Vehicle Population
+
+The route file defines **20 vehicles** (comment on line 1) in **10 vehicle types** (Car0–Car9):
+`src/automotive/examples/sumo_files_v2v_map/cars.rou.xml:1`
+
+All vehicle types share the following longitudinal dynamics:
+
+| Parameter | Value | Citation |
+|-----------|-------|----------|
+| `accel` | 4.0 m/s² | `cars.rou.xml:11` |
+| `decel` | 7.5 m/s² | `cars.rou.xml:11` |
+| `emergencyDecel` | 7.0–10.0 m/s² (type-dependent) | `cars.rou.xml:11-20` |
+| `minGap` | 1.0 m | `cars.rou.xml:11` |
+
+Speed limits vary across types, simulating a heterogeneous traffic mix:
+
+| Type | vClass | maxSpeed (m/s) | maxSpeed (km/h) |
+|------|--------|----------------|-----------------|
+| Car0 | emergency | 20.83 | 75.0 |
+| Car1 | *(default)* | 5.55 | 20.0 |
+| Car2 | *(default)* | 6.94 | 25.0 |
+| Car3 | *(default)* | 8.33 | 30.0 |
+| Car4 | *(default)* | 9.72 | 35.0 |
+| Car5 | *(default)* | 11.11 | 40.0 |
+| Car6 | *(default)* | 12.50 | 45.0 |
+| Car7 | *(default)* | 13.89 | 50.0 |
+| Car8 | *(default)* | 15.27 | 55.0 |
+| Car9 | *(default)* | 16.66 | 60.0 |
+
+`src/automotive/examples/sumo_files_v2v_map/cars.rou.xml:11-20`
+
+Car0 is designated with SUMO vClass `emergency`, distinguishing it as the priority vehicle in Emergency Vehicle Alert (EVA) scenarios.
+
+### B.2 Departure Schedule
+
+Vehicle departure times are staggered and were generated by a vehicle-flow script at a nominal rate of 1.4 vehicles/minute (visible in the comment: `"-r 1.4"`):
+`src/automotive/examples/sumo_files_v2v_map/cars.rou.xml:2`
+
+The first vehicle (`veh1`) departs at 0.305 s; the last (`veh20`) at 15.924 s. All 20 vehicles are in the network from approximately t = 16 s onward:
+`src/automotive/examples/sumo_files_v2v_map/cars.rou.xml:22-61`
+
+### B.3 Vehicle Flow Generator
+
+The script `vehicleFlow.py` was used to generate `cars.rou.xml`. It produces vehicle departure times with **exponential inter-arrival times** at a configurable rate, up to a maximum of 20 vehicles, assigned to a fixed set of circular routes:
+`src/automotive/examples/sumo_files_v2v_map/vehicleFlow.py:1-98`
+
+### B.4 Penetration Rate
+
+The `PenetrationRate` attribute of `TraciClient` controls what fraction of SUMO vehicles are equipped with wireless communication and therefore receive a corresponding ns-3 node. The default value in the ns-3 attribute system is 1.0 (all vehicles equipped):
+`src/traci/model/traci-client.cc:100-103`
+
+The scenario script overrides this with a command-line argument `--penetrationRate` (default 0.7 in the scenario, 1.0 in the entrypoint):
+`src/automotive/examples/v2v-emergencyVehicleAlert-nrv2x.cc:109`
+`entrypoint.sh:19`
+
+Vehicles not selected by the penetration-rate filter are added to an `m_untrackedVehicles` list and continue to move in SUMO but carry no ns-3 network stack:
+`src/traci/model/traci-client.h:134`
+
+---
+
+## C. Parking Model
+
+### C.1 Parking Slot Generation
+
+Static parking slots alongside road segments are generated by the Python script `generate_parking.py`. The algorithm:
+
+1. Loads lane geometry from `map.net.xml`.
+2. Converts SUMO internal XY coordinates to WGS84 longitude/latitude.
+3. Samples positions along each lane at 12 m intervals for road types `residential`, `secondary`, and `tertiary`.
+4. Assigns each candidate position to an **H3 hexagonal cell** at **resolution 14** (cell edge length ≈ 18 m), keeping at most one parking slot per cell to prevent overlap.
+5. Computes the slot's **bearing angle** from the lane's local geometry.
+6. Writes parking areas with dimensions **2.5 m width × 5.0 m length** to a SUMO additional XML file.
+
+`src/automotive/examples/sumo_files_v2v_map/generate_parking.py:1-178`
+
+**Note on operational scenario:** The production Docker run uses the SUMO configuration `combination_normale_parked_50.sumo.cfg` (default in `docker/docker-compose.yml:15`), which is loaded from an external volume (`./mappa:/sim/mappa:ro`, `docker/docker-compose.yml:12`). This file, its associated network, and route files are **not tracked in the repository**. The description above covers the reference scenario stored in the repository; the actual experimental scenario may differ.
+
+---
+
+## D. SUMO ↔ ns-3 Interface (TraCI)
+
+### D.1 TraCI Protocol
+
+**TraCI** (Traffic Control Interface) is SUMO's built-in socket API that enables an external process to read and control the simulation state at runtime. In this framework, the ns-3 process acts as the TraCI client; SUMO acts as the server.
+
+The TraCI connection is established by `TraciClient::SumoSetup()`, which launches SUMO as a subprocess and then connects via a TCP socket:
+`src/traci/model/traci-client.h:91`
+
+The TCP port on which SUMO listens defaults to 1338 in the TraciClient attribute system:
+`src/traci/model/traci-client.cc:58-59`
+
+The scenario overrides this to port 3400 (to avoid conflicts and to match Docker port mappings):
+`src/automotive/examples/v2v-emergencyVehicleAlert-nrv2x.cc:643`
+
+### D.2 Synchronisation Loop
+
+The simulation loop alternates between a SUMO time step and an ns-3 time step. Within each iteration, `TraciClient` performs two operations in order:
+
+1. **`SynchroniseNodeMap()`** — Processes vehicle arrivals and departures. Vehicles marked for removal by external commands (`m_pendingRemoval`) are cleaned up first; new vehicles from `simulation.getDepartedIDList()` are created; vehicles in `simulation.getArrivedIDList()` are destroyed:
+   `src/traci/model/traci-client.h:125`
+
+2. **`UpdatePositions()`** — Reads current positions, headings, and speeds from SUMO via `vehicle.getPosition()`, `vehicle.getAngle()`, and `vehicle.getSpeed()`, then updates ns-3 node mobility models. Vehicles in `m_pendingRemoval` are skipped:
+   `src/traci/model/traci-client.h:119`
+
+The TraCI synchronisation interval (`sumo-updates`, mapped to `--sumo-updates` command-line argument) defaults to 0.1 s:
+`entrypoint.sh:17`
+
+The default in the scenario file itself is 0.01 s:
+`src/automotive/examples/v2v-emergencyVehicleAlert-nrv2x.cc:99`
+
+The entrypoint runtime default (0.1 s) takes precedence when the container is launched without explicit override.
+
+The SUMO random seed is set to 10 in the scenario:
+`src/automotive/examples/v2v-emergencyVehicleAlert-nrv2x.cc:647`
+
+Node altitude in ns-3 is fixed at **1.5 m** above ground for all vehicles:
+`src/traci/model/traci-client.cc:128`
+
+### D.3 ZMQ Telemetry Channels
+
+In addition to TraCI, the framework adds **ZeroMQ** (ZMQ) inter-process channels for real-time telemetry to external bridge processes (e.g., a Python or Rust orchestrator):
+
+| Socket | ZMQ pattern | Port | Direction | Purpose |
+|--------|-------------|------|-----------|---------|
+| `m_zmq_pub` | PUSH | 5555 | ns-3 → bridge | Vehicle events: `GpsUpdate`, `VehicleEntered`, `VehicleExited` |
+| `m_zmq_cmd` | PULL | 5558 | bridge → ns-3 | Commands: `ChangeTarget`, `SetStop`, `RemoveVehicle` |
+| `m_zmq_gossip_in` | PULL | 5560 | Rust → ns-3 | Gossip envelopes for relay into the NR-V2X channel |
+| `m_zmq_gossip_out` | PUSH | 5561 | ns-3 → Rust | Gossip delivery receipts (receiver ID + payload) |
+
+`src/traci/model/traci-client.h:171-182`
+
+All events published on port 5555 are serialised as JSON strings and sent non-blocking (`ZMQ_DONTWAIT`):
+`src/traci/model/traci-client.cc:149`
+
+Commands received on port 5558 are parsed with a lightweight inline JSON parser (no external library dependency):
+`src/traci/model/traci-client.cc:163-187`
+
+---
+
+## E. NR-V2X Communication Layer
+
+### E.1 Radio Access Technology
+
+The wireless channel uses **5G NR-V2X Mode 2 (PC5 Sidelink)** — device-to-device communication without network infrastructure. The ns-3 module is the `nr` module (CTTC NR module). The scenario configures the following radio parameters:
+
+| Parameter | Value | Citation |
+|-----------|-------|----------|
+| Centre frequency | 5.89 GHz (band n47) | `v2v-emergencyVehicleAlert-nrv2x.cc:124` |
+| Bandwidth | 400 resource blocks | `v2v-emergencyVehicleAlert-nrv2x.cc:125` |
+| Numerology (µ) | 2 (60 kHz subcarrier spacing) | `v2v-emergencyVehicleAlert-nrv2x.cc:129` |
+| Transmit power | 23 dBm | `v2v-emergencyVehicleAlert-nrv2x.cc:126` |
+| TDD UL/DL pattern | `"UL\|UL\|UL\|UL\|UL\|UL\|UL\|UL\|UL\|UL\|"` (all-uplink) | `v2v-emergencyVehicleAlert-nrv2x.cc:127` |
+| SL bitmap | `"1\|1\|1\|1\|1\|1\|1\|1\|1\|1"` | `v2v-emergencyVehicleAlert-nrv2x.cc:128` |
+| Subchannel size | 10 resource blocks | `v2v-emergencyVehicleAlert-nrv2x.cc:132` |
+| Reservation period | 20 ms | `v2v-emergencyVehicleAlert-nrv2x.cc:136` |
+| MCS index | 14 | `v2v-emergencyVehicleAlert-nrv2x.cc:143` |
+| SL bearer activation time | 2.0 s | `v2v-emergencyVehicleAlert-nrv2x.cc:119` |
+
+### E.2 Resource Allocation
+
+Mode 2 uses **Semi-Persistent Scheduling (SPS)** for autonomous resource selection. The relevant scheduling parameters are:
+
+| Parameter | Value | Citation |
+|-----------|-------|----------|
+| Sensing window T₀ | 100 ms | `v2v-emergencyVehicleAlert-nrv2x.cc:130` |
+| Selection window T₂min | 5 slots | `v2v-emergencyVehicleAlert-nrv2x.cc:131` |
+| T₁ | 2 slots | `v2v-emergencyVehicleAlert-nrv2x.cc:138` |
+| T₂ | 81 slots | `v2v-emergencyVehicleAlert-nrv2x.cc:139` |
+| Max transmissions per reservation | 3 | `v2v-emergencyVehicleAlert-nrv2x.cc:133` |
+| Resource keep probability | 0.0 | `v2v-emergencyVehicleAlert-nrv2x.cc:134` |
+| Max retransmissions (PSSCH) | 5 | `v2v-emergencyVehicleAlert-nrv2x.cc:135` |
+| PSSCH RSRP threshold | −128 dBm | `v2v-emergencyVehicleAlert-nrv2x.cc:140` |
+| Sensing enabled | false | `v2v-emergencyVehicleAlert-nrv2x.cc:137` |
+
+The scheduler class is `NrSlUeMacSchedulerSimple` operating with a fixed MCS (no AMC rate adaptation):
+`src/automotive/examples/v2v-emergencyVehicleAlert-nrv2x.cc:442-444`
+
+### E.3 Channel Model
+
+The propagation model is **WINNER+ B1** (`BandwidthPartInfo::V2V_Highway`), selected to represent an urban/highway vehicular environment:
+`src/automotive/examples/v2v-emergencyVehicleAlert-nrv2x.cc:331`
+
+Channel randomness (fast fading, shadowing) is **disabled** in the default configuration:
+`src/automotive/examples/v2v-emergencyVehicleAlert-nrv2x.cc:141`
+
+When disabled, the shadow fading and the channel update period are both set to zero, making the channel fully deterministic:
+`src/automotive/examples/v2v-emergencyVehicleAlert-nrv2x.cc:351-353`
+
+### E.4 Error Model
+
+The link-layer error model is `NrLteMiErrorModel` (Mutual Information-based BLER estimation):
+`src/automotive/examples/v2v-emergencyVehicleAlert-nrv2x.cc:433`
+
+The AMC mode is set to `NrAmc::ErrorModel` (table-driven, not Shannon-based):
+`src/automotive/examples/v2v-emergencyVehicleAlert-nrv2x.cc:435`
+
+### E.5 Addressing and Multicast
+
+V2X messages are distributed via **IPv4 multicast**:
+
+| Parameter | Value | Citation |
+|-----------|-------|----------|
+| Group address | 225.0.0.0 | `v2v-emergencyVehicleAlert-nrv2x.cc:602` |
+| Layer-2 destination ID (dstL2Id) | 255 (broadcast) | `v2v-emergencyVehicleAlert-nrv2x.cc:604` |
+| EVA application UDP port | 8000 | `v2v-emergencyVehicleAlert-nrv2x.cc:607` |
+| Gossip application UDP port | 8001 | `src/traci/model/v2x-gossip-app.h:32` |
+
+### E.6 RNG Configuration
+
+A fixed RNG stream seed (stream = 1) is assigned to ensure reproducible channel realisations:
+`src/automotive/examples/v2v-emergencyVehicleAlert-nrv2x.cc:569`
+
+---
+
+## F. Fork Additions (Delta from Upstream VaN3Twin)
+
+This work uses **h3-vanet/VaN3Twin**, a fork of the upstream ms-van3t/VaN3Twin framework. The following additions are present in this fork and absent from the upstream:
+
+### F.1 Gossip Relay Application (`V2xGossipApp`)
+
+A custom ns-3 `Application` subclass that installs a **UDP gossip relay** on every simulated vehicle node.
+
+- **Transmit path:** `V2xGossipApp::Send()` wraps an arbitrary byte payload in a UDP datagram addressed to multicast group **225.0.0.0**, port **8001**, and injects it into the ns-3 wireless channel:
+  `src/traci/model/v2x-gossip-app.cc:70-76`
+
+- **Receive path:** `V2xGossipApp::Receive()` reads incoming datagrams (up to 65,536 bytes), copies the payload, and invokes a registered `RxCallback` with the vehicle's SUMO ID and the raw bytes:
+  `src/traci/model/v2x-gossip-app.cc:78-92`
+
+- **Registration:** Each gossip application is registered with `TraciClient::RegisterGossipApp()`, which stores a `std::function` wrapper around `V2xGossipApp::Send()`, indexed by SUMO vehicle ID. This avoids a circular compile-time dependency between the `traci` and `automotive` modules:
+  `src/traci/model/traci-client.h:63-65`
+
+- **Gossip logging:** An async background thread writes per-vehicle gossip statistics (TX count, RX count, timestamps) to `/tmp/gossip_ns3.log`. Log entries are triggered either after every 100 messages or after a 30-second wall-clock interval per vehicle:
+  `src/traci/model/traci-client.h:194-208`
+
+### F.2 ZMQ Gossip Relay Channels
+
+Two additional ZMQ sockets relay gossip messages between an external Rust process and the ns-3 channel:
+
+- **Port 5560 (PULL):** Receives gossip envelopes from the Rust engine. `TraciClient::ProcessGossipIn()` dequeues each envelope, looks up the destination vehicle's `V2xGossipApp`, and calls `Send()`:
+  `src/traci/model/traci-client.h:216`
+
+- **Port 5561 (PUSH):** When a vehicle's `V2xGossipApp` delivers a gossip packet, `TraciClient::OnGossipReceived()` publishes the receiver's SUMO ID and payload to the Rust engine:
+  `src/traci/model/traci-client.h:217-218`
+
+### F.3 Batch Position Updates
+
+Rather than sending a separate UDP datagram per vehicle per simulation step, `UpdatePositions()` serialises all vehicle positions into a single **JSON batch message** (`batch_positions`) and sends it to the vehicle visualizer. This reduces UDP datagram count by a factor equal to the number of active vehicles:
+`src/vehicle-visualizer/js/server.js:80-112`
+
+### F.4 Per-Vehicle Gossip Metrics for Visualizer
+
+`TraciClient` maintains per-vehicle gossip counters (`m_gossipTxCount`, `m_gossipRxCount`, `m_gossipNeighbors`) that are sampled each sim step and forwarded to the browser visualizer as `gossip,id,tx,rx,nbr` UDP datagrams. The visualizer maps these to marker colours (grey → orange → green):
+`src/traci/model/traci-client.h:188-190`
+
+### F.5 Vehicle Removal via External Command
+
+A `RemoveVehicle` command received on ZMQ port 5558 calls `TraCIAPI::vehicle.remove()` and inserts the vehicle's SUMO ID into `m_pendingRemoval`. Pending vehicles are skipped in `UpdatePositions()` and fully cleaned up (gossip maps, node map, visualizer) in the next call to `SynchroniseNodeMap()`:
+`src/traci/model/traci-client.h:211`
+
+### F.6 Removed Upstream Components
+
+The following upstream components were removed from this fork to reduce image size and scope:
+
+| Component | Approximate size | Notes |
+|-----------|-----------------|-------|
+| `src/nr/old-version/` | ~50 MB | Obsolete NR module backup |
+| `src/sionna/` | ~392 KB | NVIDIA Sionna ray-tracing integration |
+| `src/carla/` | ~709 KB | CARLA autonomous-driving co-simulation |
+| `src/nr/PATCH` | ~122 KB | NR patch archive |
+
+**Assumption:** Size estimates are based on directory size comparisons between the fork and upstream at the time of development; they may drift as both repositories evolve.
+
+---
+
+## G. Reproducibility
+
+### G.1 Docker Image
+
+The simulation environment is packaged as a two-stage Docker image (`Dockerfile.van3twin`). The builder stage compiles ns-3 and VaN3Twin from source inside `ubuntu:22.04`; the runtime stage copies only the compiled artifacts and installs runtime dependencies (`sumo`, `libzmq5`, `nodejs`).
+
+### G.2 Entrypoint and Environment Variables
+
+The container entrypoint (`entrypoint.sh`) launches the ns-3 scenario with the following configurable parameters:
+
+| Environment variable | Default | Description | Citation |
+|----------------------|---------|-------------|----------|
+| `SUMO_FOLDER` | `/sim/mappa` | Root folder of SUMO config files | `entrypoint.sh:13` |
+| `SUMO_CONFIG` | `/sim/mappa/sumo_cfg/combination_normale_50.sumo.cfg` | SUMO scenario config | `entrypoint.sh:14` |
+| `VEHICLE_VISUALIZER` | `true` | Enable/disable web visualizer | `entrypoint.sh:15` |
+| `SUMO_GUI` | `false` | Enable/disable SUMO GUI | `entrypoint.sh:16` |
+| `SUMO_UPDATES` | `0.1` s | TraCI synchronisation interval | `entrypoint.sh:17` |
+| `SUMO_WAIT` | `10` s | Wait for SUMO socket on startup | `entrypoint.sh:18` |
+| `PENETRATION_RATE` | `1.0` | Fraction of vehicles with V2X | `entrypoint.sh:19` |
+| `SIM_TIME` | `300` s | Total simulation duration | `entrypoint.sh:20` |
+| `CSV_LOG` | `/sim/logs/results` | Output CSV log path | `entrypoint.sh:21` |
+| `MOB_TRACE` | `normale.rou.xml` | Mobility trace (route file) | `entrypoint.sh:22` |
+
+The Docker Compose file (`docker/docker-compose.yml`) publishes the following ports:
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 3400 | TCP | TraCI / SUMO remote control |
+| 8080 | TCP | Vehicle visualizer HTTP server |
+| 5555 | TCP | ZMQ PUSH — vehicle events |
+| 5558 | TCP | ZMQ PULL — vehicle commands |
+| 5560 | TCP | ZMQ PULL — gossip inbound (Rust→ns-3) |
+| 5561 | TCP | ZMQ PUSH — gossip outbound (ns-3→Rust) |
+
+`docker/docker-compose.yml:4-10`
+
+### G.3 External Data (Not in Repository)
+
+The production scenario relies on a SUMO configuration (`combination_normale_parked_50.sumo.cfg`) and associated network/route files that are provided through an external volume mount (`./mappa:/sim/mappa:ro`):
+`docker/docker-compose.yml:12-15`
+
+These files are **not tracked in the repository** and are therefore **not reproducible from the repository alone**. They must be supplied separately. The repository contains only the reference scenario under `src/automotive/examples/sumo_files_v2v_map/`.
+
+---
+
+## H. Summary Parameter Table
+
+| Parameter | Value | Source |
+|-----------|-------|--------|
+| **Map** | | |
+| Geographic location | Turin, Italy | `map.net.xml:42` |
+| WGS84 bounding box | 7.656–7.679 °E, 45.053–45.076 °N | `map.net.xml:42` |
+| UTM projection | Zone 32N, WGS84 | `map.net.xml:42` |
+| SUMO netedit version | 1.5.0 | `map.net.xml:3` |
+| Lane speed limit | 30 km/h | `map.net.xml:45` |
+| Lane width | 3.0 m | `map.net.xml:45` |
+| **Traffic** | | |
+| Simulation duration | 300 s | `map.sumo.cfg:12` |
+| SUMO time step | 0.1 s | `map.sumo.cfg:13` |
+| Number of vehicles | 20 | `cars.rou.xml:1` |
+| Vehicle types | 10 (Car0–Car9) | `cars.rou.xml:11-20` |
+| Emergency vehicle maxSpeed | 75 km/h (20.83 m/s) | `cars.rou.xml:11` |
+| Acceleration | 4.0 m/s² | `cars.rou.xml:11` |
+| Deceleration | 7.5 m/s² | `cars.rou.xml:11` |
+| Minimum gap | 1.0 m | `cars.rou.xml:11` |
+| Departure rate | ~1.4 veh/min | `cars.rou.xml:2` |
+| **Parking** | | |
+| Parking slot length | 5.0 m | `generate_parking.py` |
+| Parking slot width | 2.5 m | `generate_parking.py` |
+| Lane sampling interval | 12 m | `generate_parking.py` |
+| H3 resolution | 14 | `generate_parking.py` |
+| **TraCI** | | |
+| TraCI port | 3400 | `v2v-emergencyVehicleAlert-nrv2x.cc:643` |
+| TraCI sync interval (container) | 0.1 s | `entrypoint.sh:17` |
+| Node altitude | 1.5 m | `traci-client.cc:128` |
+| SUMO random seed | 10 | `v2v-emergencyVehicleAlert-nrv2x.cc:647` |
+| Penetration rate (container) | 1.0 | `entrypoint.sh:19` |
+| **NR-V2X** | | |
+| Standard | 5G NR-V2X Mode 2, PC5 | `v2v-emergencyVehicleAlert-nrv2x.cc:124` |
+| Frequency band | n47, 5.89 GHz | `v2v-emergencyVehicleAlert-nrv2x.cc:124` |
+| Bandwidth | 400 RB | `v2v-emergencyVehicleAlert-nrv2x.cc:125` |
+| Subcarrier spacing (numerology µ=2) | 60 kHz | `v2v-emergencyVehicleAlert-nrv2x.cc:129` |
+| Transmit power | 23 dBm | `v2v-emergencyVehicleAlert-nrv2x.cc:126` |
+| MCS index | 14 | `v2v-emergencyVehicleAlert-nrv2x.cc:143` |
+| Sensing window T₀ | 100 ms | `v2v-emergencyVehicleAlert-nrv2x.cc:130` |
+| Selection window T₂min | 5 slots | `v2v-emergencyVehicleAlert-nrv2x.cc:131` |
+| Reservation period | 20 ms | `v2v-emergencyVehicleAlert-nrv2x.cc:136` |
+| Max retransmissions | 5 | `v2v-emergencyVehicleAlert-nrv2x.cc:135` |
+| Resource keep probability | 0.0 | `v2v-emergencyVehicleAlert-nrv2x.cc:134` |
+| PSSCH RSRP threshold | −128 dBm | `v2v-emergencyVehicleAlert-nrv2x.cc:140` |
+| Sensing | disabled | `v2v-emergencyVehicleAlert-nrv2x.cc:137` |
+| Channel randomness | disabled | `v2v-emergencyVehicleAlert-nrv2x.cc:141` |
+| Channel model | WINNER+ B1 / V2V_Highway | `v2v-emergencyVehicleAlert-nrv2x.cc:331` |
+| Error model | NrLteMiErrorModel | `v2v-emergencyVehicleAlert-nrv2x.cc:433` |
+| Multicast group | 225.0.0.0 | `v2v-emergencyVehicleAlert-nrv2x.cc:602` |
+| Layer-2 broadcast ID | 255 | `v2v-emergencyVehicleAlert-nrv2x.cc:604` |
+| SL bearer activation time | 2.0 s | `v2v-emergencyVehicleAlert-nrv2x.cc:119` |
+| RNG stream | 1 | `v2v-emergencyVehicleAlert-nrv2x.cc:569` |
+| **Gossip application** | | |
+| Gossip UDP port | 8001 | `v2x-gossip-app.h:32` |
+| Gossip multicast address | 225.0.0.0 | `v2x-gossip-app.cc:74` |
+| Receive buffer size | 65,536 bytes | `v2x-gossip-app.cc:86` |
+
+---
+
+## I. Values Not Available in the Repository
+
+The following parameters are required for a complete methodology description but are **not present in any tracked file**:
+
+1. **Operational SUMO scenario files** — `combination_normale_parked_50.sumo.cfg`, the associated `.net.xml`, and `.rou.xml` files are supplied via an external Docker volume (`./mappa`) and are not in the repository. This includes:
+   - Exact road network for the operational scenario
+   - Number and type of parked vehicles
+   - Mobility trace for the `normale` configuration
+
+2. **Number of parked vehicles in the operational scenario** — The filename suffix `_50` suggests 50 parked vehicles, but this cannot be confirmed without the file.
+
+3. **Physical-layer packet size** — The application-layer payload length for gossip messages is not fixed in any repository file; it depends on the external Rust bridge.
+
+4. **Gossip protocol parameters** — TTL, forwarding rules, and H3 routing resolution used by the Rust gossip engine are in an external codebase not present in this repository.
+
+5. **CSV output schema** — The `--csv-log` flag is passed to ns-3 but the output format is not defined in any tracked file.
+
+6. **Scenario repeat count / confidence intervals** — No seed-sweep or statistical replication configuration was found in the repository.
