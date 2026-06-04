@@ -1,6 +1,6 @@
 """
-Generatore slot parcheggio sintetici da map.net.xml SUMO.
-Salva il bearing di ogni slot per visualizzazione come rettangoli orientati.
+Synthetic parking slot generator from SUMO map.net.xml.
+Saves each slot's bearing for visualization as oriented rectangles.
 """
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
@@ -149,7 +149,7 @@ def export_xml(slots, output_path):
     lines = [l for l in xmlstr.split("\n") if l.strip()]
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
-    print(f"Scritti {len(slots)} slot in {output_path}")
+    print(f"Written {len(slots)} slots to {output_path}")
 
 
 def main():
@@ -157,18 +157,18 @@ def main():
     out_path = Path("./mappa/parking2.add.xml")
 
     if not Path(net_path).exists():
-        print(f"Errore: {net_path} non trovato")
+        print(f"Error: {net_path} not found")
         return
 
-    print("Caricamento mappa con sumolib...")
+    print("Loading map with sumolib...")
     net = sumolib.net.readNet(net_path)
 
-    print("Parsing corsie...")
+    print("Parsing lanes...")
     lanes = parse_net(net_path, net)
-    print(f"Lane trovate: {len(lanes)}")
+    print(f"Lanes found: {len(lanes)}")
 
     slots = generate_slots(lanes)
-    print(f"Slot generati: {len(slots)}")
+    print(f"Slots generated: {len(slots)}")
 
     export_xml(slots, out_path)
 

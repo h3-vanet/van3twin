@@ -1,13 +1,13 @@
 #!/bin/bash
 set -e
 
-# echo "Aspetto core su 7447..."
+# echo "Waiting for core on 7447..."
 # while ! nc -z core 7447 2>/dev/null; do
 #     sleep 2
 # done
-# echo "Core pronto."
+# echo "Core ready."
 
-echo "Aspetto 5 secondi per core e bridge..."
+echo "Waiting 5 seconds for core and bridge..."
 sleep 5
 
 SUMO_FOLDER=${SUMO_FOLDER:-/sim/mappa}
