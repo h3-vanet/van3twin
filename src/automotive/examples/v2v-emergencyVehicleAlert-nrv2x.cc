@@ -44,6 +44,13 @@
 #include <libxml/tree.h>
 #include <unistd.h>
 #include "ns3/core-module.h"
+#include "ns3/tee-streambuf.h"
+
+// Saved original streambufs for teed stdout/stderr
+static std::streambuf *g_old_cout_buf = nullptr;
+static std::streambuf *g_old_cerr_buf = nullptr;
+static TeeStreamBuf *g_tee_cout = nullptr;
+static TeeStreamBuf *g_tee_cerr = nullptr;
 
 
 using namespace ns3;
@@ -100,6 +107,7 @@ main (int argc, char *argv[])
   std::string csv_name;
   std::string csv_name_cumulative;
   std::string sumo_netstate_file_name;
+  std::string log_prefix = "Van3twin";
   bool vehicle_vis = false;
   double sumo_wait_for_socket = 5.0; // seconds to wait for SUMO to open TraCI socket
 
@@ -164,6 +172,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("baseline", "Baseline for PRR calculation", m_baseline_prr);
   cmd.AddValue ("met-sup","Use the Metric supervisor or not",m_metric_sup);
   cmd.AddValue ("penetrationRate", "Rate of vehicles equipped with wireless communication devices", penetrationRate);
+  cmd.AddValue ("log-prefix", "Prefix for the log file name (e.g. 'bridge' -> bridge.log.YYYY-MM-DD)", log_prefix);
 
   cmd.AddValue ("simTime",
                 "Simulation time in seconds",
@@ -242,6 +251,18 @@ main (int argc, char *argv[])
 
   // Parse the command line
   cmd.Parse (argc, argv);
+
+  // Set up tee: duplicate all stdout/stderr to a log file
+  {
+    std::string log_file = defaultLogFileName (log_prefix);
+    g_old_cout_buf = std::cout.rdbuf ();
+    g_old_cerr_buf = std::cerr.rdbuf ();
+    g_tee_cout = new TeeStreamBuf (g_old_cout_buf, log_file);
+    g_tee_cerr = new TeeStreamBuf (g_old_cerr_buf, log_file);
+    std::cout.rdbuf (g_tee_cout);
+    std::cerr.rdbuf (g_tee_cerr);
+    std::cout << "[log] tee started, writing to " << log_file << std::endl;
+  }
 
   if (verbose)
     {
