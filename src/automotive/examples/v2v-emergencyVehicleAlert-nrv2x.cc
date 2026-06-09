@@ -46,14 +46,14 @@
 #include "ns3/core-module.h"
 #include "ns3/tee-streambuf.h"
 
+
+using namespace ns3;
+
 // Saved original streambufs for teed stdout/stderr
 static std::streambuf *g_old_cout_buf = nullptr;
 static std::streambuf *g_old_cerr_buf = nullptr;
 static TeeStreamBuf *g_tee_cout = nullptr;
 static TeeStreamBuf *g_tee_cerr = nullptr;
-
-
-using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("v2v-nrv2x");
 
