@@ -46,14 +46,14 @@
 #include "ns3/core-module.h"
 #include "ns3/tee-streambuf.h"
 
+
+using namespace ns3;
+
 // Saved original streambufs for teed stdout/stderr
 static std::streambuf *g_old_cout_buf = nullptr;
 static std::streambuf *g_old_cerr_buf = nullptr;
 static TeeStreamBuf *g_tee_cout = nullptr;
 static TeeStreamBuf *g_tee_cerr = nullptr;
-
-
-using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("v2v-nrv2x");
 
@@ -107,7 +107,7 @@ main (int argc, char *argv[])
   std::string csv_name;
   std::string csv_name_cumulative;
   std::string sumo_netstate_file_name;
-  std::string log_prefix = "Van3twin";
+  std::string log_prefix = "/sim/logs/van3twin";
   bool vehicle_vis = false;
   double sumo_wait_for_socket = 5.0; // seconds to wait for SUMO to open TraCI socket
 

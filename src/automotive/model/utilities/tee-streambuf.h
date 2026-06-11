@@ -6,6 +6,7 @@
 #include <string>
 #include <streambuf>
 #include <ctime>
+#include <cstring>
 #include <sstream>
 
 namespace ns3 {
@@ -17,6 +18,11 @@ public:
     : m_original (original)
   {
     m_file.open (filename, std::ios::out | std::ios::app);
+    if (!m_file.is_open () && m_original)
+      {
+        std::string w = "[tee] WARNING: cannot open log file: " + filename + "\n";
+        m_original->sputn (w.c_str (), w.size ());
+      }
   }
 
   ~TeeStreamBuf ()
@@ -57,7 +63,11 @@ protected:
     if (m_original)
       m_original->sputn (s, n);
     if (m_file.is_open ())
-      m_file.write (s, n);
+      {
+        m_file.write (s, n);
+        if (std::memchr (s, '\n', static_cast<size_t> (n)))
+          m_file.flush ();
+      }
     return n;
   }
 
