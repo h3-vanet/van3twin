@@ -107,7 +107,7 @@ main (int argc, char *argv[])
   std::string csv_name;
   std::string csv_name_cumulative;
   std::string sumo_netstate_file_name;
-  std::string log_prefix = "Van3twin";
+  std::string log_prefix = "/sim/logs/van3twin";
   bool vehicle_vis = false;
   double sumo_wait_for_socket = 5.0; // seconds to wait for SUMO to open TraCI socket
 
