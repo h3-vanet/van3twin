@@ -419,14 +419,34 @@ namespace ns3
         NS_FATAL_ERROR("Can not connect to sumo via traci: " << e.what());
       }
 
+    // Read ZMQ_PORT_OFFSET from environment (default 0).
+    // Allows multiple scenarios on the same host by offsetting all ZMQ ports.
+    int zmqPortOffset = 0;
+    {
+      const char* envVal = std::getenv("ZMQ_PORT_OFFSET");
+      if (envVal != nullptr)
+        {
+          try { zmqPortOffset = std::stoi(envVal); }
+          catch (...) { zmqPortOffset = 0; }
+        }
+      if (zmqPortOffset != 0)
+        std::cout << "[zmq] ZMQ_PORT_OFFSET=" << zmqPortOffset << std::endl;
+    }
+
+    const int portPub       = 5555 + zmqPortOffset;
+    const int portCmd       = 5558 + zmqPortOffset;
+    const int portGossipIn  = 5560 + zmqPortOffset;
+    const int portGossipOut = 5561 + zmqPortOffset;
+
     // Initialize ZMQ PUSH socket for vehicle event publishing.
     // PUSH (not PUB) so messages are buffered until a consumer connects,
     // avoiding the ZMQ "slow joiner" problem where early events are dropped.
     m_zmq_context = zmq_ctx_new();
     m_zmq_pub     = zmq_socket(m_zmq_context, ZMQ_PUSH);
-    if (zmq_bind(m_zmq_pub, "tcp://*:5555") != 0)
+    std::string addrPub = "tcp://*:" + std::to_string(portPub);
+    if (zmq_bind(m_zmq_pub, addrPub.c_str()) != 0)
       {
-        NS_LOG_WARN("TraciClient: ZMQ bind on tcp://*:5555 failed: " << zmq_strerror(errno)
+        NS_LOG_WARN("TraciClient: ZMQ bind on " << addrPub << " failed: " << zmq_strerror(errno)
                     << " — vehicle events will not be published.");
         zmq_close(m_zmq_pub);
         zmq_ctx_destroy(m_zmq_context);
@@ -435,22 +455,23 @@ namespace ns3
       }
     else
       {
-        std::cout << "[zmq] PUSH socket bound on tcp://*:5555" << std::endl;
+        std::cout << "[zmq] PUSH socket bound on " << addrPub << std::endl;
       }
 
     // ZMQ PULL — receive vehicle commands from bridge
     if (m_zmq_context != nullptr)
       {
         m_zmq_cmd = zmq_socket(m_zmq_context, ZMQ_PULL);
-        if (zmq_bind(m_zmq_cmd, "tcp://*:5558") != 0)
+        std::string addrCmd = "tcp://*:" + std::to_string(portCmd);
+        if (zmq_bind(m_zmq_cmd, addrCmd.c_str()) != 0)
           {
-            NS_LOG_WARN("TraciClient: ZMQ bind on tcp://*:5558 failed: " << zmq_strerror(errno));
+            NS_LOG_WARN("TraciClient: ZMQ bind on " << addrCmd << " failed: " << zmq_strerror(errno));
             zmq_close(m_zmq_cmd);
             m_zmq_cmd = nullptr;
           }
         else
           {
-            std::cout << "[zmq] CMD PULL socket bound on tcp://*:5558" << std::endl;
+            std::cout << "[zmq] CMD PULL socket bound on " << addrCmd << std::endl;
           }
       }
 
@@ -460,28 +481,30 @@ namespace ns3
         m_zmq_gossip_in = zmq_socket(m_zmq_context, ZMQ_PULL);
         int hwm = 500;
         zmq_setsockopt(m_zmq_gossip_in, ZMQ_RCVHWM, &hwm, sizeof(hwm));
-        if (zmq_bind(m_zmq_gossip_in, "tcp://*:5560") != 0)
+        std::string addrGossipIn = "tcp://*:" + std::to_string(portGossipIn);
+        if (zmq_bind(m_zmq_gossip_in, addrGossipIn.c_str()) != 0)
           {
-            NS_LOG_WARN("TraciClient: ZMQ bind on tcp://*:5560 failed: " << zmq_strerror(errno));
+            NS_LOG_WARN("TraciClient: ZMQ bind on " << addrGossipIn << " failed: " << zmq_strerror(errno));
             zmq_close(m_zmq_gossip_in);
             m_zmq_gossip_in = nullptr;
           }
         else
           {
-            std::cout << "[zmq] GOSSIP PULL bound on tcp://*:5560" << std::endl;
+            std::cout << "[zmq] GOSSIP PULL bound on " << addrGossipIn << std::endl;
           }
 
         m_zmq_gossip_out = zmq_socket(m_zmq_context, ZMQ_PUSH);
         zmq_setsockopt(m_zmq_gossip_out, ZMQ_SNDHWM, &hwm, sizeof(hwm));
-        if (zmq_bind(m_zmq_gossip_out, "tcp://*:5561") != 0)
+        std::string addrGossipOut = "tcp://*:" + std::to_string(portGossipOut);
+        if (zmq_bind(m_zmq_gossip_out, addrGossipOut.c_str()) != 0)
           {
-            NS_LOG_WARN("TraciClient: ZMQ bind on tcp://*:5561 failed: " << zmq_strerror(errno));
+            NS_LOG_WARN("TraciClient: ZMQ bind on " << addrGossipOut << " failed: " << zmq_strerror(errno));
             zmq_close(m_zmq_gossip_out);
             m_zmq_gossip_out = nullptr;
           }
         else
           {
-            std::cout << "[zmq] GOSSIP PUSH bound on tcp://*:5561" << std::endl;
+            std::cout << "[zmq] GOSSIP PUSH bound on " << addrGossipOut << std::endl;
           }
       }
 
