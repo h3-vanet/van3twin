@@ -168,16 +168,16 @@ private:
 
   bool m_sionna = false;
 
-  // ZMQ PUSH socket — vehicle events (base port 5555 + ZMQ_PORT_OFFSET)
+  // ZMQ PUSH socket — vehicle events (env ZMQ_PUB_PORT, default 5555, + ZMQ_PORT_OFFSET)
   void*  m_zmq_context = nullptr;
   void*  m_zmq_pub     = nullptr;
   void   zmqPublish (const char* json);
 
-  // ZMQ PULL socket — vehicle commands from bridge (base port 5558 + ZMQ_PORT_OFFSET)
+  // ZMQ PULL socket — vehicle commands from bridge (env ZMQ_CMD_PORT, default 5558, + ZMQ_PORT_OFFSET)
   void*  m_zmq_cmd     = nullptr;
   void   ProcessCommands ();
 
-  // Gossip relay — PULL (base 5560) / PUSH (base 5561) + ZMQ_PORT_OFFSET
+  // Gossip relay — PULL (env ZMQ_GOSSIP_IN_PORT, default 5560) / PUSH (env ZMQ_GOSSIP_OUT_PORT, default 5561) + ZMQ_PORT_OFFSET
   void*  m_zmq_gossip_in  = nullptr;
   void*  m_zmq_gossip_out = nullptr;
   // Store Send callbacks as std::function to avoid pulling V2xGossipApp type into this header
