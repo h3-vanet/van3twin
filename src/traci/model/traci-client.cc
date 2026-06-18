@@ -419,24 +419,24 @@ namespace ns3
         NS_FATAL_ERROR("Can not connect to sumo via traci: " << e.what());
       }
 
-    // Read ZMQ_PORT_OFFSET from environment (default 0).
-    // Allows multiple scenarios on the same host by offsetting all ZMQ ports.
-    int zmqPortOffset = 0;
-    {
-      const char* envVal = std::getenv("ZMQ_PORT_OFFSET");
-      if (envVal != nullptr)
-        {
-          try { zmqPortOffset = std::stoi(envVal); }
-          catch (...) { zmqPortOffset = 0; }
-        }
-      if (zmqPortOffset != 0)
-        std::cout << "[zmq] ZMQ_PORT_OFFSET=" << zmqPortOffset << std::endl;
-    }
+    // Read ZMQ port configuration from environment.
+    // Base ports: ZMQ_PUB_PORT, ZMQ_CMD_PORT, ZMQ_GOSSIP_IN_PORT, ZMQ_GOSSIP_OUT_PORT
+    // Offset:     ZMQ_PORT_OFFSET (added on top of every base port)
+    auto envInt = [](const char* name, int fallback) -> int {
+      const char* v = std::getenv(name);
+      if (v == nullptr) return fallback;
+      try { return std::stoi(v); } catch (...) { return fallback; }
+    };
 
-    const int portPub       = 5555 + zmqPortOffset;
-    const int portCmd       = 5558 + zmqPortOffset;
-    const int portGossipIn  = 5560 + zmqPortOffset;
-    const int portGossipOut = 5561 + zmqPortOffset;
+    const int zmqPortOffset = envInt("ZMQ_PORT_OFFSET", 0);
+    const int portPub       = envInt("ZMQ_PUB_PORT",        5555) + zmqPortOffset;
+    const int portCmd       = envInt("ZMQ_CMD_PORT",        5558) + zmqPortOffset;
+    const int portGossipIn  = envInt("ZMQ_GOSSIP_IN_PORT",  5560) + zmqPortOffset;
+    const int portGossipOut = envInt("ZMQ_GOSSIP_OUT_PORT", 5561) + zmqPortOffset;
+
+    std::cout << "[zmq] ports: pub=" << portPub << " cmd=" << portCmd
+              << " gossip_in=" << portGossipIn << " gossip_out=" << portGossipOut
+              << " (offset=" << zmqPortOffset << ")" << std::endl;
 
     // Initialize ZMQ PUSH socket for vehicle event publishing.
     // PUSH (not PUB) so messages are buffered until a consumer connects,
