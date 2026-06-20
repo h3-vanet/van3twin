@@ -380,6 +380,17 @@ namespace ns3
   {
     NS_LOG_FUNCTION(this);
 
+    // Parse port offset early — needed for both TraCI and ZMQ ports.
+    auto envInt = [](const char* name, int fallback) -> int {
+      const char* v = std::getenv(name);
+      if (v == nullptr) return fallback;
+      try { return std::stoi(v); } catch (...) { return fallback; }
+    };
+    const int zmqPortOffset = envInt("ZMQ_PORT_OFFSET", 0);
+
+    // Apply offset to TraCI base port (set via SumoPort attribute, default 1338)
+    // before scanning for a free port. Arithmetic in int to avoid uint16_t issues.
+    m_sumoPort = static_cast<uint16_t>(static_cast<int>(m_sumoPort) + zmqPortOffset);
     m_sumoPort = GetFreePort(m_sumoPort);
 
     m_includeNode = includeNode;
@@ -419,16 +430,7 @@ namespace ns3
         NS_FATAL_ERROR("Can not connect to sumo via traci: " << e.what());
       }
 
-    // Read ZMQ port configuration from environment.
-    // Base ports: ZMQ_PUB_PORT, ZMQ_CMD_PORT, ZMQ_GOSSIP_IN_PORT, ZMQ_GOSSIP_OUT_PORT
-    // Offset:     ZMQ_PORT_OFFSET (added on top of every base port)
-    auto envInt = [](const char* name, int fallback) -> int {
-      const char* v = std::getenv(name);
-      if (v == nullptr) return fallback;
-      try { return std::stoi(v); } catch (...) { return fallback; }
-    };
-
-    const int zmqPortOffset = envInt("ZMQ_PORT_OFFSET", 0);
+    // ZMQ base ports (configurable via env) + the same offset parsed above.
     const int portPub       = envInt("ZMQ_PUB_PORT",        5555) + zmqPortOffset;
     const int portCmd       = envInt("ZMQ_CMD_PORT",        5558) + zmqPortOffset;
     const int portGossipIn  = envInt("ZMQ_GOSSIP_IN_PORT",  5560) + zmqPortOffset;
@@ -436,6 +438,7 @@ namespace ns3
 
     std::cout << "[zmq] ports: pub=" << portPub << " cmd=" << portCmd
               << " gossip_in=" << portGossipIn << " gossip_out=" << portGossipOut
+              << " traci=" << m_sumoPort
               << " (offset=" << zmqPortOffset << ")" << std::endl;
 
     // Initialize ZMQ PUSH socket for vehicle event publishing.
