@@ -215,6 +215,26 @@ namespace ns3
               std::cout << "[cmd] SetStop FAILED vehicle=" << vehicle_id << std::endl;
             }
           }
+        else if (type == "RegisterVehicleId")
+          {
+            auto getU64 = [&](const std::string& key) -> uint64_t {
+              for (const std::string& sep : {std::string("\":"), std::string("\": ")}) {
+                std::string search = "\"" + key + sep;
+                size_t p = msg.find(search);
+                if (p != std::string::npos) {
+                  p += search.size();
+                  try { return std::stoull(msg.substr(p)); } catch (...) { return 0; }
+                }
+              }
+              return 0;
+            };
+            uint64_t rustId = getU64("rust_id");
+            if (rustId != 0 && !vehicle_id.empty())
+              {
+                m_sumo_to_u64[vehicle_id] = rustId;
+                std::cout << "[cmd] RegisterVehicleId sumo=" << vehicle_id << " u64=" << rustId << std::endl;
+              }
+          }
         else if (type == "RemoveVehicle")
           {
             if (m_NodeMap.count(vehicle_id) && !m_pendingRemoval.count(vehicle_id))
