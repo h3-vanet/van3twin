@@ -172,6 +172,7 @@ private:
   void*  m_zmq_context = nullptr;
   void*  m_zmq_pub     = nullptr;
   void   zmqPublish (const char* json);
+  void   zmqPublishCritical (const char* json);
 
   // ZMQ PULL socket — vehicle commands from bridge (env ZMQ_CMD_PORT, default 5558, + ZMQ_PORT_OFFSET)
   void*  m_zmq_cmd     = nullptr;
