@@ -67,6 +67,12 @@ V2xGossipApp::StopApplication()
 }
 
 void
+V2xGossipApp::StopApplicationNow()
+{
+  StopApplication();
+}
+
+void
 V2xGossipApp::Send(const uint8_t* data, uint32_t len)
 {
   if (!m_socket) return;

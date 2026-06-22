@@ -17,6 +17,7 @@ public:
   virtual ~V2xGossipApp();
 
   void Send(const uint8_t* data, uint32_t len);
+  void StopApplicationNow();
 
   using RxCallback = std::function<void(const std::string& vehicleId,
                                         const uint8_t* data, uint32_t len)>;

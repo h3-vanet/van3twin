@@ -21,6 +21,7 @@
 #include "ns3/emergencyVehicleAlert-helper.h"
 #include "ns3/emergencyVehicleAlert.h"
 #include "ns3/v2x-gossip-app-helper.h"
+#include "ns3/v2x-gossip-app.h"
 #include "ns3/traci-module.h"
 #include "ns3/config-store.h"
 #include "ns3/network-module.h"
@@ -742,16 +743,13 @@ main (int argc, char *argv[])
   SHUTDOWN_FCN shutdownWifiNode = [] (Ptr<Node> exNode,std::string vehicleID)
     {
       /* stop all applications */
-      Ptr<emergencyVehicleAlert> appSample_ = exNode->GetApplication(0)->GetObject<emergencyVehicleAlert>();
-
-      if(appSample_)
-        appSample_->StopApplicationNow();
+      Ptr<V2xGossipApp> gossipApp = exNode->GetApplication(0)->GetObject<V2xGossipApp>();
+      if(gossipApp)
+        gossipApp->StopApplicationNow();
 
        /* set position outside communication range */
       Ptr<ConstantPositionMobilityModel> mob = exNode->GetObject<ConstantPositionMobilityModel>();
       mob->SetPosition(Vector(-1000.0+(rand()%25),320.0+(rand()%25),250.0)); // rand() for visualization purposes
-
-      /* NOTE: further actions could be required for a safe shut down! */
     };
 
   /* start traci client with given function pointers */
