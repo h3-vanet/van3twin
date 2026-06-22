@@ -1,0 +1,160 @@
+name: Build VaN3Twin
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - claude/**
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    env:
+      MARCH: x86-64
+
+    steps:
+      - name: Checkout VaN3Twin
+        uses: actions/checkout@v4
+
+      #################################################################
+      # SUMO repository
+      #################################################################
+
+      - name: Install SUMO repository
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl gnupg ca-certificates
+
+          curl -fsSL \
+            https://download.opensuse.org/repositories/science:/dlr/xUbuntu_22.04/Release.key \
+            | gpg --dearmor > science_dlr.gpg
+
+          sudo mv science_dlr.gpg \
+            /etc/apt/trusted.gpg.d/science_dlr.gpg
+
+          echo "deb http://download.opensuse.org/repositories/science:/dlr/xUbuntu_22.04/ /" \
+            | sudo tee /etc/apt/sources.list.d/science_dlr.list
+
+      #################################################################
+      # Dependencies
+      #################################################################
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            sumo \
+            sumo-tools \
+            build-essential \
+            cmake \
+            ninja-build \
+            git \
+            ccache \
+            python3 \
+            pkg-config \
+            libgsl-dev \
+            libgslcblas0 \
+            libsqlite3-dev \
+            libxml2-dev \
+            libssl-dev \
+            libboost-dev \
+            libzmq3-dev \
+            nodejs
+
+      #################################################################
+      # Clone ns-3
+      #################################################################
+
+      - name: Clone ns-3
+        run: |
+          git clone \
+            --depth=1 \
+            -b ns-3-dev-v2x-v0.2 \
+            https://gitlab.com/cttc-lena/ns-3-dev.git
+
+      - name: Clone NR module
+        run: |
+          git clone \
+            --depth=1 \
+            -b nr-v2x-dev \
+            https://gitlab.com/cttc-lena/nr.git \
+            ns-3-dev/src/nr
+
+      #################################################################
+      # Merge VaN3Twin modules
+      #################################################################
+
+      - name: Copy VaN3Twin sources
+        run: |
+          cp -rf src/. ns-3-dev/src/
+
+      #################################################################
+      # Patch ns-3
+      #################################################################
+
+      - name: Enable C language
+        run: |
+          sed -i -E \
+            's#^([[:blank:]]*)project\(NS3 CXX\)#\1project\(NS3 C CXX\)#' \
+            ns-3-dev/CMakeLists.txt
+
+      - name: Apply VaN3Twin patches
+        run: |
+          cd ns-3-dev
+
+          cp src/automotive/propagation-extended/cni-urbanmicrocell-propagation-loss-model.* \
+             src/propagation/model/
+
+          cp src/automotive/propagation-extended/CMakeLists.txt \
+             src/propagation/
+
+          cp src/automotive/model/TxTracker/channel_files/modified/yans-wifi-phy.h \
+             src/wifi/model/
+
+          for tag in rssi-tag sinr-tag rsrp-tag timestamp-tag size-tag; do
+            for stack in wifi/model cv2x/model nr/model lte/model; do
+              cp src/automotive/model/SignalInfo/${tag}.cc src/${stack}/
+              cp src/automotive/model/SignalInfo/${tag}.h  src/${stack}/
+            done
+          done
+
+      #################################################################
+      # Configure
+      #################################################################
+
+      - name: Configure ns-3
+        working-directory: ns-3-dev
+        run: |
+          ./ns3 configure \
+            --build-profile=optimized \
+            --disable-tests \
+            --disable-python \
+            --enable-examples \
+            --disable-modules=wimax,mesh,dsr,dsdv,uan,lr-wpan,brite,click,openflow \
+            -- \
+            -DNS3_NATIVE_OPTIMIZATIONS=OFF \
+            -DCMAKE_CXX_FLAGS="-march=${MARCH}" \
+            -DCMAKE_C_FLAGS="-march=${MARCH}"
+
+      #################################################################
+      # Build
+      #################################################################
+
+      - name: Build
+        working-directory: ns-3-dev
+        run: |
+          ./ns3 build -j$(nproc)
+
+      #################################################################
+      # Upload artifacts
+      #################################################################
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ns3-build
+          path: ns-3-dev/build
