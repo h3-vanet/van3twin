@@ -150,6 +150,27 @@ namespace ns3
   }
 
   void
+  TraciClient::zmqPublishCritical(const char* json)
+  {
+    if (m_zmq_pub == nullptr) return;
+    size_t len = strlen(json);
+    int rc = zmq_send(m_zmq_pub, json, len, ZMQ_DONTWAIT);
+    if (rc < 0)
+      {
+        for (int attempt = 1; attempt <= 3; ++attempt)
+          {
+            std::cout << "[zmq] critical send failed (errno=" << errno
+                      << "), retry " << attempt << "/3" << std::endl;
+            rc = zmq_send(m_zmq_pub, json, len, ZMQ_DONTWAIT);
+            if (rc >= 0) break;
+          }
+        if (rc < 0)
+          std::cout << "[zmq] CRITICAL: VehicleExited lost after 3 retries"
+                    << " (errno=" << errno << ")" << std::endl;
+      }
+  }
+
+  void
   TraciClient::ProcessCommands()
   {
     if (m_zmq_cmd == nullptr) return;
@@ -837,7 +858,7 @@ namespace ns3
                 snprintf(buf, sizeof(buf),
                     "{\"type\":\"VehicleExited\",\"sumo_id\":\"%s\",\"vehicle_id\":%llu}",
                     veh.c_str(), (unsigned long long)rustId);
-                zmqPublish(buf);
+                zmqPublishCritical(buf);
                 std::cout << "[vehicle] exited ZMQ sumo_id=" << veh << " u64=" << rustId << std::endl;
               }
           }
@@ -902,7 +923,7 @@ namespace ns3
                     snprintf(buf, sizeof(buf),
                         "{\"type\":\"VehicleExited\",\"sumo_id\":\"%s\",\"vehicle_id\":%llu}",
                         veh.c_str(), (unsigned long long)rustId);
-                    zmqPublish(buf);
+                    zmqPublishCritical(buf);
                     std::cout << "[vehicle] exited ZMQ sumo_id=" << veh << " u64=" << rustId << std::endl;
                   }
               }
